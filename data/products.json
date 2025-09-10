@@ -59,9 +59,9 @@
       "version": "jugador",
       "retro": false,
        "images": [
-        "assets/img/liverpool/5787c967.jpg",
-         "assets/img/liverpool/527f44e4.jpg",
-        "assets/img/liverpool/6d1192a6.jpg"
+       "assets/img/Liverpool/5787c967.jpg",
+        "assets/img/Liverpool/527f44e4.jpg",
+        "assets/img/Liverpool/6d1192a6.jpg"
       ],
       "sizes": { "S": 0, "M": 6, "L": 10, "XL": 6, "XXL": 3 },
       "tags": ["liverpool", "25/26", "player"]
@@ -121,7 +121,7 @@
       "league": "Premier League",
       "version": "fan",
       "retro": true,
-      "images": ["assets/img/manchester united/a8529459.jpg"],
+      "images": ["assets/img/Manchester United/a8529459.jpg"],
       "sizes": { "S": 2, "M": 4, "L": 5, "XL": 2, "XXL": 1 },
       "tags": ["barcelona", "retro"]
     }
