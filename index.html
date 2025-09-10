@@ -166,7 +166,7 @@
               </div>
             </form>
           </div>
-        </div>
+        </div>  
       </div>
     </div>
 
@@ -174,5 +174,17 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Core theme JS-->
     <script src="js/scripts.js"></script>
+
+    <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A (o Cmd+Alt+A en Mac) -->
+    <script>
+      (function () {
+        document.addEventListener('keydown', function (e) {
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
+            e.preventDefault();
+            window.location.href = 'admin.html';
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

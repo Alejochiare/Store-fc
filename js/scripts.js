@@ -1,5 +1,19 @@
 // ====== Config ======
-const DATA_URL = 'data/products.json?v=2';
+
+// ====== Admin Store ======
+const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guardará admin
+const DATA_URL_FALLBACK = 'data/products.json';    // tu json actual en /data
+
+// Carga productos: si hay override en localStorage, usa eso; si no, lee el json del repo
+async function loadProductsData() {
+  const ls = localStorage.getItem(LS_KEY_PRODUCTS);
+  if (ls) {
+    try { return JSON.parse(ls); } catch (e) { console.warn('LS corrupto, uso fallback', e); }
+  }
+  const r = await fetch(DATA_URL_FALLBACK, { cache: 'no-store' });
+  return await r.json(); // { products: [...] }
+}
+
 const WHATSAPP_PHONE = '5493563491364'; // 549 + area sin 0 + numero sin 15
 const SHEETS_ENDPOINT = ''; // opcional: Apps Script para loguear compras (pedidos/ventas)
 
@@ -30,16 +44,17 @@ const FILTERS = { q:'', league:'', version:'', retro:false };
 async function loadProducts(){
   if (PRODUCTS.length) return PRODUCTS;
   try {
-    const res = await fetch(DATA_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`No se pudo leer ${DATA_URL} (${res.status})`);
-    const data = await res.json();
-    PRODUCTS = data.products || [];
+    const data = await loadProductsData();
+    // Filtra items con enabled === false (eliminados desde admin)
+    PRODUCTS = (data.products || []).filter(p => p.enabled !== false);
   } catch (e) {
     console.warn('Error cargando productos:', e);
     PRODUCTS = [];
     const grid = document.querySelector('#productGrid');
     if (grid) grid.innerHTML = `<div class="col-12">
-      <div class="alert alert-danger">No pude cargar <code>${DATA_URL}</code>. Verificá la carpeta/archivo.</div>
+      <div class="alert alert-danger">
+        No pude cargar los productos (override local o <code>${DATA_URL_FALLBACK}</code>). Verificá la fuente de datos.
+      </div>
     </div>`;
   }
   return PRODUCTS;
@@ -68,6 +83,8 @@ function availableFor(p, size, excludeIndex = null){
 // ====== Home (grid + filtros) ======
 function applyFilters(list){
   let out = [...list];
+  // por si acaso, vuelve a excluir deshabilitados
+  out = out.filter(p => p.enabled !== false);
   const q = FILTERS.q.trim().toLowerCase();
   if (q) out = out.filter(p => [p.name, p.subtitle, p.league, p.version, ...(p.tags||[])].join(' ').toLowerCase().includes(q));
   if (FILTERS.league) out = out.filter(p => p.league === FILTERS.league);
