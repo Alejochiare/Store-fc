@@ -1,5 +1,5 @@
 // ====== Config ======
-const DATA_URL = 'data/products.json';
+const DATA_URL = 'data/products.json?v=2';
 const WHATSAPP_PHONE = '5493563491364'; // 549 + area sin 0 + numero sin 15
 const SHEETS_ENDPOINT = ''; // opcional: Apps Script para loguear compras (pedidos/ventas)
 
@@ -30,7 +30,7 @@ const FILTERS = { q:'', league:'', version:'', retro:false };
 async function loadProducts(){
   if (PRODUCTS.length) return PRODUCTS;
   try {
-    const res = await fetch(DATA_URL);
+    const res = await fetch(DATA_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error(`No se pudo leer ${DATA_URL} (${res.status})`);
     const data = await res.json();
     PRODUCTS = data.products || [];
