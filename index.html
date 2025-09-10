@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="Tienda de camisetas de fútbol" />
+    <title>Store FC</title>
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+    <!-- Bootstrap icons-->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+    <!-- Core theme CSS (includes Bootstrap)-->
+    <link href="css/styles.css" rel="stylesheet" />
+    <style>
+      /* ayuda para que las fotos queden prolijas */
+      .card-img-top { height: 260px; object-fit: cover; }
+      header .display-5 { font-size: 2.4rem; }
+      header .lead { opacity: .85; }
+    </style>
+  </head>
+  <!-- data-page="index" le dice al JS qué renderizar -->
+  <body data-page="index">
+    <!-- Navigation-->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+      <div class="container px-4 px-lg-5">
+        <a class="navbar-brand fw-bold" href="index.html">Nombre</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
+            <li class="nav-item"><a class="nav-link active" aria-current="page" href="index.html">Inicio</a></li>
+            <!-- Botón que abre el modal de pedido -->
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#pedidoModal">Hacé tu pedido</a>
+            </li>
+          </ul>
+          <a class="btn btn-outline-dark" href="cart.html">
+            <i class="bi-cart-fill me-1"></i>
+            Carrito
+            <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Header-->
+    <header class="bg-dark py-5">
+      <div class="container px-4 px-lg-5 my-5">
+        <div class="text-center text-white">
+          <h1 class="display-5 fw-bolder">Nombre</h1>
+          <p class="lead fw-normal text-white-50 mb-0">De Europa a tu puerta, calidad garantizada</p>
+        </div>
+      </div>
+    </header>
+
+    <!-- Filtros / Buscador -->
+    <section class="py-3 border-bottom bg-light">
+      <div class="container px-4 px-lg-5">
+        <form class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <label class="form-label mb-1">Buscar</label>
+            <input id="searchInput" class="form-control" type="search" placeholder="River, Boca, Premier..." />
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Liga</label>
+            <select id="leagueSel" class="form-select">
+              <option value="">Todas</option>
+              <option value="Liga Argentina">Liga Argentina</option>
+              <option value="Premier League">Premier League</option>
+              <option value="La Liga">La Liga</option>
+              <option value="Serie A">Serie A</option>
+              <option value="Bundesliga">Bundesliga</option>
+              <option value="MLS">MLS</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label mb-1">Versión</label>
+            <select id="versionSel" class="form-select">
+              <option value="">Todas</option>
+              <option value="fan">Fan</option>
+              <option value="jugador">Jugador</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-2">
+            <div class="form-check mt-4">
+              <input id="retroChk" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="retroChk">Solo retro</label>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Grid -->
+    <section class="py-5">
+      <div class="container px-4 px-lg-5 mt-3">
+        <div id="productGrid"
+             class="row gx-4 gx-lg-5 row-cols-2 row-cols-md-3 row-cols-xl-4 justify-content-center">
+          <!-- JS inyecta las cards acá -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer-->
+    <footer class="py-5 bg-dark">
+      <div class="container"><p class="m-0 text-center text-white">Copyright &copy; Store FC 2025</p></div>
+    </footer>
+
+    <!-- Modal: Hacé tu pedido -->
+    <div class="modal fade" id="pedidoModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Hacé tu pedido</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <p class="small text-muted">
+              Completá los datos. Si la querés <strong>sin dorsal</strong>, <strong>sin número</strong> o
+              <strong>sin parches</strong>, <u>dejá esos campos vacíos</u>.
+            </p>
+            <form id="quickOrderForm" class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Club</label>
+                <input name="club" class="form-control" placeholder="River, Boca, Barcelona..." required>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Año / Temporada</label>
+                <input name="anio" class="form-control" placeholder="25/26, 98/99..." required>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Titular o Suplente</label>
+                <select name="modelo" class="form-select">
+                  <option value="Titular">Titular</option>
+                  <option value="Suplente">Suplente</option>
+                  <option value="Tercera">Tercera</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Versión</label>
+                <select name="version" class="form-select">
+                  <option value="fan">Fan</option>
+                  <option value="jugador">Jugador</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Número (opcional)</label>
+                <input name="numero" class="form-control" placeholder="10">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Dorsal (opcional)</label>
+                <input name="dorsal" class="form-control" placeholder="Nombre en la espalda">
+              </div>
+              <div class="col-12">
+                <label class="form-label">Parches (opcional)</label>
+                <input name="parches" class="form-control" placeholder="UCL, Premier, Copa, etc.">
+              </div>
+              <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-dark">
+                  <i class="bi bi-whatsapp me-1"></i> Enviar por WhatsApp
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap core JS-->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Core theme JS-->
+    <script src="js/scripts.js"></script>
+  </body>
+</html>

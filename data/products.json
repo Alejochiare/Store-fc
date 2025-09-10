@@ -1,0 +1,129 @@
+{
+  "products": [
+
+    {
+      "id": "river-2526-home-player",
+      "name": "25/26 River Plate",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "Liga Argentina",
+      "version": "jugador",
+      "retro": false,
+      "images": [
+        "assets/img/River/5d2465533 (1).jpg",
+        "assets/img/River/5d246553 (1).jpg",
+        "assets/img/River/ed183e30.jpg"
+      ],
+      "sizes": { "S": 0, "M": 2, "L": 2, "XL": 2 , "XXL": 0 },
+      "tags": ["river", "25/26", "player"]
+    },
+    {
+      "id": "boca-2526-home-player",
+      "name": "25/26 Boca Juniors",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "Liga Argentina",
+      "version": "jugador",
+      "retro": false,
+      "images": [
+        "assets/img/Boca/856dc4c1.jpg",
+        "assets/img/Boca/9e446977.jpg",
+        "assets/img/Boca/100d00c4.jpg"
+      ],
+      "sizes": { "S": 5, "M": 10, "L": 9, "XL": 4, "XXL": 3 },
+      "tags": ["boca", "25/26", "player"]
+    },
+    {
+      "id": "barcelona-home-player",
+      "name": "25/26 Barcelona",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "La Liga",
+      "version": "jugador",
+      "retro": false,
+      "images": [
+        "assets/img/Barcelona/8ed067a4.jpg",
+         "assets/img/Barcelona/48e8b2b8.jpg",
+        "assets/img/Barcelona/4ae6d5f4.jpg"
+      ],
+      "sizes": { "S": 2, "M": 4, "L": 5, "XL": 2, "XXL": 1 },
+      "tags": ["barcelona", "25/26", "player"]
+    },
+
+    {
+      "id": "liverpool-2526-home-player",
+      "name": "Liverpool 25/26",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "Premier League",
+      "version": "jugador",
+      "retro": false,
+       "images": [
+        "assets/img/liverpool/5787c967.jpg",
+         "assets/img/liverpool/527f44e4.jpg",
+        "assets/img/liverpool/6d1192a6.jpg"
+      ],
+      "sizes": { "S": 0, "M": 6, "L": 10, "XL": 6, "XXL": 3 },
+      "tags": ["liverpool", "25/26", "player"]
+    }, 
+    {
+      "id": "river-2422-home-player-suplente",
+      "name": "24/25 River Plate",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "Liga Argentina",
+      "version": "jugador",
+      "retro": false,
+      "images": [
+        "assets/img/River/48509537.jpg",
+        "assets/img/River/bd48dcdf.jpg"
+
+      ],
+      "sizes": { "S": 0, "M": 2, "L": 2, "XL": 2 , "XXL": 0 },
+      "tags": ["river", "25/26", "player"]
+    }, 
+    {
+        "id": "river-2425-tercera-visitante-hincha",
+  "name": "24/25 River Plate",
+  "subtitle": "Fan version",
+  "price": 48000,
+  "league": "Liga Argentina",
+  "version": "fan",
+  "retro": false,
+  "images": [
+    "assets/img/River/78ffcbcb.jpeg",
+    "assets/img/River/a0545a15.jpeg"
+  ],
+  "sizes": { "S": 0, "M": 2, "L": 2, "XL": 2, "XXL": 0 },
+  "tags": ["river", "24/25", "hincha", "fan", "tercera", "visitante"]
+},
+{
+      "id": "chelsea-2526-home-player",
+      "name": "25/26 Chelsea ",
+      "subtitle": "Player version",
+      "price": 55000,
+      "league": "Premier League",
+      "version": "jugador",
+      "retro": false,
+       "images": [
+        "assets/img/Chelsea/12267e3b.jpg",
+        "assets/img/Chelsea/b30d4b9b.jpg"
+  ],
+      "sizes": { "S": 4, "M": 6, "L": 10, "XL": 6, "XXL": 3 },
+      "tags": ["liverpool", "25/26", "player"]
+    },
+
+    {
+      "id": "manchester-united-retro",
+      "name": "Manchester United 06/07",
+      "subtitle": "Retro",
+      "price": 50000,
+      "league": "Premier League",
+      "version": "fan",
+      "retro": true,
+      "images": ["assets/img/manchester united/a8529459.jpg"],
+      "sizes": { "S": 2, "M": 4, "L": 5, "XL": 2, "XXL": 1 },
+      "tags": ["barcelona", "retro"]
+    }
+  ]
+} 
