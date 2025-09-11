@@ -1,13 +1,13 @@
-// ==============================
-// scripts.js  (reemplazar todo)
-// ==============================
-
 // ====== Config ======
 const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guarda el panel admin (con versión)
-const DATA_URL        = 'data/products.json';      // JSON canónico del repo
-const VERSION_URL     = 'data/version.json';       // { "version": "..." }
-const WHATSAPP_PHONE  = '5493563491364';           // 549 + area sin 0 + número sin 15
-const SHEETS_ENDPOINT = '';                        // opcional: Apps Script para loguear ventas
+
+// === API en Apps Script ===
+const API_BASE    = 'https://script.google.com/macros/s/AKfycbwcaGIX10Ehl_CA36eyMtTLbeGOtgS6KP8C6w22BBrtf_4c5TFws1QK8ZEy4rzuXwvDlA/exec';
+const DATA_URL    = API_BASE + '?route=products';
+const VERSION_URL = API_BASE + '?route=version';
+
+const WHATSAPP_PHONE  = '5493563491364';
+const SHEETS_ENDPOINT = ''; // opcional
 
 // ====== Helpers ======
 const $  = s => document.querySelector(s);

@@ -1,8 +1,15 @@
 // ====== Config ======
 const LS_KEY_PRODUCTS = 'admin_products_override';
 const ADMIN_PASSWORD  = '9/12';
-const DATA_URL        = 'data/products.json';
-const VERSION_URL     = 'data/version.json';
+
+// === API en Apps Script ===
+const API_BASE    = 'https://script.google.com/macros/s/AKfycbwcaGIX10Ehl_CA36eyMtTLbeGOtgS6KP8C6w22BBrtf_4c5TFws1QK8ZEy4rzuXwvDlA/exec';
+const DATA_URL    = API_BASE + '?route=products';
+const VERSION_URL = API_BASE + '?route=version';
+
+// Publicación (usa el MISMO secreto que en Code.gs)
+const SECRET      = 'StoreFC_2025_alejo_4e9c1c6c2f7a48a0';
+const PUBLISH_URL = API_BASE + '?key=' + encodeURIComponent(SECRET);
 
 let REMOTE_VERSION = '0';
 let CREATING = false; // evita doble submit en "Agregar remera"
@@ -363,4 +370,26 @@ function render(skipCount){
 
     $('#tbody').appendChild(tr);
   });
+  // ====== Publicar en servidor (Apps Script) ======
+$('#btnPublish')?.addEventListener('click', async ()=>{
+  try {
+    const data = getData(); // { version, products }
+
+    // Enviar como FormData para evitar preflight/CORS
+    const fd = new FormData();
+    fd.append('payload', JSON.stringify({ products: data.products }));
+
+    const resp = await fetch(PUBLISH_URL, { method:'POST', body: fd });
+    const j = await resp.json();
+    if (!j.ok) throw new Error(j.error || 'Error publicando');
+
+    // Actualizo versión local para que el preview coincida con server
+    REMOTE_VERSION = j.version;
+    saveData({ version: REMOTE_VERSION, products: data.products });
+    alert('Publicado ✔ – versión: ' + j.version);
+  } catch (e) {
+    alert('No se pudo publicar: ' + (e.message || e));
+  }
+});
+
 }
