@@ -4,7 +4,7 @@
       "id": "river-2526-home-player",
       "name": "25/26 River Plate",
       "subtitle": "Player version",
-      "price": 0,
+      "price": 55000,
       "league": "Liga Argentina",
       "version": "jugador",
       "retro": false,
@@ -14,10 +14,10 @@
         "assets/img/River/ed183e30.jpg"
       ],
       "sizes": {
-        "S": 0,
-        "M": 0,
-        "L": 0,
-        "XL": 0,
+        "S": 11,
+        "M": 1,
+        "L": 3,
+        "XL": 3,
         "XXL": 1
       },
       "tags": [
@@ -51,7 +51,8 @@
         "boca",
         "25/26",
         "player"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "barcelona-home-player",
@@ -77,7 +78,8 @@
         "barcelona",
         "25/26",
         "player"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "liverpool-2526-home-player",
@@ -103,7 +105,8 @@
         "liverpool",
         "25/26",
         "player"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "river-2422-home-player-suplente",
@@ -128,7 +131,8 @@
         "river",
         "25/26",
         "player"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "river-2425-tercera-visitante-hincha",
@@ -156,7 +160,8 @@
         "fan",
         "tercera",
         "visitante"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "chelsea-2526-home-player",
@@ -181,7 +186,8 @@
         "liverpool",
         "25/26",
         "player"
-      ]
+      ],
+      "enabled": true
     },
     {
       "id": "manchester-united-retro",
