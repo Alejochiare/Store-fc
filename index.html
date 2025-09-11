@@ -6,21 +6,15 @@
     <meta name="description" content="Tienda de camisetas de fútbol" />
     <title>Store FC</title>
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
-    <!-- Bootstrap icons-->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
-    <!-- ÚNICO CSS (versionado para cache bust) -->
     <link href="css/styles.css?v=20251009" rel="stylesheet" />
     <style>
-      /* ayuda para que las fotos queden prolijas */
       .card-img-top { height: 260px; object-fit: cover; }
       header .display-5 { font-size: 2.4rem; }
       header .lead { opacity: .85; }
     </style>
   </head>
-
-  <!-- data-page="index" le dice al JS qué renderizar -->
   <body data-page="index">
-    <!-- Navigation-->
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
       <div class="container px-4 px-lg-5">
         <a class="navbar-brand fw-bold" href="index.html">Nombre</a>
@@ -32,7 +26,6 @@
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
             <li class="nav-item"><a class="nav-link active" aria-current="page" href="index.html">Inicio</a></li>
-            <!-- Botón que abre el modal de pedido -->
             <li class="nav-item">
               <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#pedidoModal">Hacé tu pedido</a>
             </li>
@@ -46,7 +39,6 @@
       </div>
     </nav>
 
-    <!-- Header-->
     <header class="bg-dark py-5">
       <div class="container px-4 px-lg-5 my-5">
         <div class="text-center text-white">
@@ -56,7 +48,6 @@
       </div>
     </header>
 
-    <!-- Filtros / Buscador -->
     <section class="py-3 border-bottom bg-light">
       <div class="container px-4 px-lg-5">
         <form class="row g-2 align-items-end">
@@ -95,17 +86,12 @@
       </div>
     </section>
 
-    <!-- Grid -->
     <section class="py-5">
       <div class="container px-4 px-lg-5 mt-3">
-        <div id="productGrid"
-             class="row gx-4 gx-lg-5 row-cols-2 row-cols-md-3 row-cols-xl-4 justify-content-center">
-          <!-- JS inyecta las cards acá -->
-        </div>
+        <div id="productGrid" class="row gx-4 gx-lg-5 row-cols-2 row-cols-md-3 row-cols-xl-4 justify-content-center"></div>
       </div>
     </section>
 
-    <!-- Footer-->
     <footer class="py-5 bg-dark">
       <div class="container"><p class="m-0 text-center text-white">Copyright &copy; Store FC 2025</p></div>
     </footer>
@@ -160,9 +146,7 @@
                 <input name="parches" class="form-control" placeholder="UCL, Premier, Copa, etc.">
               </div>
               <div class="col-12 d-flex gap-2">
-                <button type="submit" class="btn btn-dark">
-                  <i class="bi bi-whatsapp me-1"></i> Enviar por WhatsApp
-                </button>
+                <button type="submit" class="btn btn-dark"><i class="bi bi-whatsapp me-1"></i> Enviar por WhatsApp</button>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
               </div>
             </form>
@@ -171,21 +155,17 @@
       </div>
     </div>
 
-    <!-- Bootstrap core JS-->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- ÚNICO JS (versionado para cache bust) -->
     <script src="js/scripts.js?v=20251009"></script>
 
-    <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A (o Cmd+Alt+A en Mac) -->
+    <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A / Cmd+Alt+A -->
     <script>
-      (function () {
-        document.addEventListener('keydown', function (e) {
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
-            e.preventDefault();
-            window.location.href = 'admin.html';
-          }
-        });
-      })();
+      document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
+          e.preventDefault();
+          window.location.href = 'admin.html';
+        }
+      });
     </script>
   </body>
 </html>

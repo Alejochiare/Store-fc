@@ -1,6 +1,7 @@
 // ====== Config ======
 const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guarda el panel admin
-const DATA_URL_FALLBACK = 'data/products.json';    // JSON del repo
+const ASSET_VERSION   = '20251009';                // cambialo cuando subas JSON nuevo
+const DATA_URL_FALLBACK = `data/products.json?v=${ASSET_VERSION}`; // JSON del repo (anti-caché)
 const WHATSAPP_PHONE = '5493563491364';            // 549 + area sin 0 + número sin 15
 const SHEETS_ENDPOINT = '';                         // opcional: Apps Script para loguear ventas
 
@@ -19,7 +20,7 @@ const updateCartBadge = () => {
   if (el) el.textContent = c.reduce((a,i)=>a + (i.qty||0), 0);
 };
 
-// Abrir WhatsApp sin duplicados (ni null por noopener/noreferrer)
+// Abrir WhatsApp sin duplicados
 function openWhatsApp(url) {
   const win = window.open(url, '_blank');
   if (win && !win.closed) { try { win.opener = null; } catch(_) {} return; }
@@ -27,7 +28,6 @@ function openWhatsApp(url) {
 }
 
 // ====== Carga/normalización de productos ======
-/** Acepta {products:[...]} o simplemente [...] y normaliza campos */
 function normalizeArray(raw) {
   const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.products) ? raw.products : []);
   return arr.map((p, idx) => ({
@@ -45,14 +45,20 @@ function normalizeArray(raw) {
   }));
 }
 
-/** Lee override de localStorage si existe; si no, JSON del repo */
 async function loadProductsData() {
+  // 1) Override guardado por Admin (solo si trae ítems)
   const ls = localStorage.getItem(LS_KEY_PRODUCTS);
   if (ls) {
-    try { return normalizeArray(JSON.parse(ls)); }
-    catch (e) { console.warn('Override LS corrupto, uso fallback:', e); }
+    try {
+      const norm = normalizeArray(JSON.parse(ls));
+      if (norm.length > 0) return norm;
+      console.warn('Override vacío/mal formado; uso fallback JSON');
+    } catch (e) {
+      console.warn('Override LS corrupto, uso fallback:', e);
+    }
   }
-  const r = await fetch(`${DATA_URL_FALLBACK}?_=${Date.now()}`, { cache: 'no-store' });
+  // 2) JSON del repo (anti-caché por versión)
+  const r = await fetch(DATA_URL_FALLBACK, { cache: 'no-store' });
   if (!r.ok) throw new Error(`No se pudo leer ${DATA_URL_FALLBACK} (${r.status})`);
   return normalizeArray(await r.json());
 }
@@ -72,9 +78,14 @@ async function loadProducts() {
     if (grid) grid.innerHTML = `
       <div class="col-12">
         <div class="alert alert-danger">
-          No pude cargar productos (override local o <code>${DATA_URL_FALLBACK}</code>). Verificá la fuente de datos.
+          No pude cargar productos (override local o <code>data/products.json</code>).
+          <button id="forceReload" class="btn btn-sm btn-outline-dark ms-2">Forzar recarga</button>
         </div>
       </div>`;
+    $('#forceReload')?.addEventListener('click', () => {
+      localStorage.removeItem(LS_KEY_PRODUCTS);
+      location.reload();
+    });
   }
   return PRODUCTS;
 }
@@ -94,21 +105,18 @@ function effectiveSizes(p){
   return out;
 }
 function availableFor(p, size, excludeIndex = null){
-  // p puede no existir (producto borrado o ID viejo en el carrito)
   const base = p?.sizes?.[size] || 0;
-  const pid  = p?.id; // undefined si no existe => reservedQty no suma nada
+  const pid  = p?.id;
   const reserved = reservedQty(pid, size, excludeIndex);
   return Math.max(0, base - reserved);
 }
-
 
 // ====== Home (grid + filtros) ======
 function applyFilters(list){
   let out = list.filter(p => p.enabled !== false);
   const q = FILTERS.q.trim().toLowerCase();
   if (q) out = out.filter(p =>
-    [p.name, p.subtitle, p.league, p.version, ...(p.tags||[])]
-      .join(' ').toLowerCase().includes(q)
+    [p.name, p.subtitle, p.league, p.version, ...(p.tags||[])].join(' ').toLowerCase().includes(q)
   );
   if (FILTERS.league)  out = out.filter(p => p.league  === FILTERS.league);
   if (FILTERS.version) out = out.filter(p => p.version === FILTERS.version);
@@ -127,16 +135,18 @@ async function renderIndex(){
   }
 
   grid.innerHTML = list.map(p => {
-    const title   = p.name || 'Producto';
-    const sub     = p.subtitle || '';
-    const price   = Number.isFinite(+p.price) ? +p.price : 0;
-    const img0    = (p.images && p.images[0]) || 'assets/img/placeholder.jpg';
+    const title = p.name || 'Producto';
+    const sub   = p.subtitle || '';
+    const price = Number.isFinite(+p.price) ? +p.price : 0;
+    const img0  = (p.images && p.images[0]) || 'assets/img/placeholder.jpg';
     return `
     <div class="col mb-5">
       <div class="card h-100">
         ${p.retro ? `<div class="badge bg-dark text-white position-absolute" style="top:.5rem;right:.5rem">Retro</div>` : ''}
         <a class="text-decoration-none" href="product.html?id=${encodeURIComponent(p.id)}">
-          <img class="card-img-top" src="${img0}" alt="${title}">
+          <img class="card-img-top"
+               src="${img0}" alt="${title}"
+               onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">
         </a>
         <div class="card-body p-4">
           <div class="text-center">
@@ -189,10 +199,13 @@ async function renderProduct(){
   view.innerHTML = `
     <div class="col-md-6">
       <div class="d-flex flex-column gap-3">
-        <img id="mainImg" class="img-fluid rounded" src="${mainImg}" alt="${p.name || 'Producto'}">
+        <img id="mainImg" class="img-fluid rounded"
+             src="${mainImg}" alt="${p.name || 'Producto'}"
+             onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">
         <div class="d-flex flex-wrap gap-2">
           ${(p.images||[]).map((src,i)=>`<img class="rounded border" style="width:82px;height:82px;object-fit:cover;cursor:pointer"
-             data-src="${src}" src="${src}" alt="${(p.name||'Producto')} ${i+1}">`).join('')}
+             data-src="${src}" src="${src}" alt="${(p.name||'Producto')} ${i+1}"
+             onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">`).join('')}
         </div>
       </div>
     </div>
@@ -278,7 +291,7 @@ function removeFromCart(i){
 }
 function updateQty(i, q){
   const cart = getCart();
-  const p = PRODUCTS.find(x=>x.id===cart[i].productId);
+  const p = PRODUCTS.find(x=>x.id===cart[i].productId) || {};
   const max = availableFor(p, cart[i].size, i);
   cart[i].qty = Math.max(1, Math.min(q|0, Math.max(1, max)));
   setCart(cart);
@@ -306,7 +319,7 @@ async function renderCart(){
         </tr></thead>
         <tbody>
           ${cart.map((i,idx)=> {
-            const p = PRODUCTS.find(x=>x.id===i.productId) || {}; // <— clave
+            const p = PRODUCTS.find(x=>x.id===i.productId) || {};
             const max = availableFor(p, i.size, idx);
             const name = i.name || p.name || 'Producto';
             const price = i.price ?? p.price ?? 0;
@@ -462,6 +475,11 @@ Parches: ${parches || 'sin parches'}
 
 // ====== Init ======
 document.addEventListener('DOMContentLoaded', async () => {
+  // Atajo de emergencia: ?reset=1 limpia override local
+  if (new URLSearchParams(location.search).has('reset')) {
+    localStorage.removeItem(LS_KEY_PRODUCTS);
+  }
+
   updateCartBadge();
   const page = document.body.dataset.page || '';
 
