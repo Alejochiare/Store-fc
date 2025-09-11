@@ -1,29 +1,63 @@
 // ====== Config ======
 const LS_KEY_PRODUCTS = 'admin_products_override';
-const ADMIN_PASSWORD  = '9/12'; 
+const ADMIN_PASSWORD  = '9/12';
+const DATA_URL        = 'data/products.json';
+const VERSION_URL     = 'data/version.json';
+
+let REMOTE_VERSION = '0';
 let CREATING = false; // evita doble submit en "Agregar remera"
 
 // ====== Utils ======
 const $ = s => document.querySelector(s);
-function saveData(obj){ localStorage.setItem(LS_KEY_PRODUCTS, JSON.stringify(obj)); }
-function getData(){ return JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || '{"products":[]}'); }
-async function loadBaseData(){
-  const ls = localStorage.getItem(LS_KEY_PRODUCTS);
-  if (ls) return JSON.parse(ls);
-  try {
-    const r = await fetch('data/products.json', {cache:'no-store'});
-    if (r.ok) return await r.json();
-  } catch(e){}
-  return { products: [] };
+
+async function fetchJSON(url){
+  const r = await fetch(url, { cache:'no-store' });
+  if(!r.ok) throw new Error('HTTP '+r.status+' en '+url);
+  return r.json();
 }
+
+async function getRemoteVersion(){
+  try {
+    const v = await fetchJSON(VERSION_URL);
+    return String(v.version || '0');
+  } catch { return '0'; }
+}
+
+async function loadBaseData(){
+  try {
+    const v = await getRemoteVersion();
+    const data = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(v)}`);
+    return { version: v, products: normalizeArray(data) };
+  } catch {
+    return { version: '0', products: [] };
+  }
+}
+
+function saveData(obj){
+  // siempre persistimos { version, products }
+  const version  = obj.version || REMOTE_VERSION || '0';
+  const products = Array.isArray(obj.products) ? obj.products
+                   : (Array.isArray(obj) ? obj : []);
+  localStorage.setItem(LS_KEY_PRODUCTS, JSON.stringify({ version, products }));
+}
+
+function getData(){
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
+    if (raw && Array.isArray(raw.products)) return raw;
+    if (raw && Array.isArray(raw)) return { version: REMOTE_VERSION, products: raw };
+  } catch {}
+  return { version: REMOTE_VERSION, products: [] };
+}
+
 // Normaliza IDs: minúsculas, sin tildes, solo [a-z0-9-]
 function slugId(s){
   return String(s||'')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // saca tildes
-    .replace(/[^a-z0-9]+/g,'-')                      // todo lo raro -> guion
-    .replace(/^-+|-+$/g,'')                          // saca guiones al borde
-    .slice(0, 80);                                   // largo máximo
+    .replace(/[^a-z0-9]+/g,'-')                      // raro -> guion
+    .replace(/^-+|-+$/g,'')                          // guiones borde
+    .slice(0, 80);
 }
 
 // --- imágenes: leer y redimensionar a dataURL ---
@@ -53,9 +87,101 @@ async function filesToDataUrls(fileList, max=8){
   return out;
 }
 
+function normalizeArray(raw){
+  const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.products) ? raw.products : []);
+  return arr.map((p, idx) => ({
+    id: p.id || p.slug || `p_${idx}`,
+    name: p.name || p.title || p.nombre || 'Producto',
+    subtitle: p.subtitle || p.sub || '',
+    price: Number(p.price ?? p.precio ?? 0),
+    league: p.league || p.liga || '',
+    version: p.version || '',
+    retro: !!p.retro,
+    images: Array.isArray(p.images) ? p.images : (Array.isArray(p.imgs) ? p.imgs : []),
+    sizes: typeof p.sizes==='object' && p.sizes ? p.sizes : (typeof p.talles==='object' && p.talles ? p.talles : {}),
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    enabled: p.enabled !== false
+  }));
+}
+
+// ====== Login ======
+$('#btnLogin').addEventListener('click', async ()=>{
+  const p = $('#adminPass').value.trim();
+  if (p !== ADMIN_PASSWORD) { alert('Contraseña incorrecta'); return; }
+
+  // Traigo versión remota para previsualizar con la misma versión
+  REMOTE_VERSION = await getRemoteVersion();
+
+  // Si no hay override, precargo con lo del repo para editar
+  if (!localStorage.getItem(LS_KEY_PRODUCTS)) {
+    const base = await loadBaseData();
+    saveData(base);
+  }
+
+  $('#loginBox').classList.add('d-none');
+  $('#adminUI').classList.remove('d-none');
+
+  // Preview de imágenes al seleccionar en el alta
+  $('#fileImages')?.addEventListener('change', async (ev)=>{
+    const urls = await filesToDataUrls(ev.target.files, 8);
+    const wrap = $('#filePreview');
+    wrap.innerHTML = urls.map(u=>`<img class="img-thumb me-1 mb-1" src="${u}">`).join('');
+  });
+
+  render();
+});
+
+$('#btnReload').addEventListener('click', async ()=>{
+  REMOTE_VERSION = await getRemoteVersion();
+  const base = await loadBaseData();
+  saveData(base);
+  render();
+});
+
+// ====== Export / Import / Clear ======
+$('#btnExport').addEventListener('click', ()=>{
+  const data = getData();
+  // 1) products.json
+  const blob1 = new Blob([JSON.stringify({ products: data.products }, null, 2)], {type:'application/json'});
+  const a1 = document.createElement('a'); a1.href = URL.createObjectURL(blob1); a1.download = 'products.json'; a1.click();
+  URL.revokeObjectURL(a1.href);
+
+  // 2) version.json (timestamp nuevo)
+  const newVersion = new Date().toISOString().replace(/[:.]/g,'-');
+  const blob2 = new Blob([JSON.stringify({ version: newVersion }, null, 2)], {type:'application/json'});
+  const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob2); a2.download = 'version.json'; a2.click();
+  URL.revokeObjectURL(a2.href);
+
+  alert('Descargados products.json y version.json.\nSubilos a /data del repo y hacé commit.');
+});
+
+$('#fileImport').addEventListener('change', async (ev)=>{
+  const file = ev.target.files[0]; if(!file) return;
+  try{
+    const obj = JSON.parse(await file.text());
+    const normalized = Array.isArray(obj.products) ? { products: normalizeArray(obj) } : { products: normalizeArray(obj) };
+    // guardo con la versión remota para previsualizar inmediatamente
+    saveData({ version: REMOTE_VERSION, products: normalized.products });
+    render();
+    alert('Importado ✔');
+  }catch(e){ alert('No se pudo importar: ' + e.message); }
+  finally { ev.target.value=''; }
+});
+
+$('#btnClear').addEventListener('click', async ()=>{
+  if(!confirm('¿Borrar override y volver al products.json del repo?')) return;
+  localStorage.removeItem(LS_KEY_PRODUCTS);
+  // Repongo con base remota para que la tabla no quede vacía
+  const base = await loadBaseData();
+  saveData(base);
+  render(true);
+  alert('Listo ✔');
+});
+
+// ====== Alta (único handler) ======
 $('#formCreate').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
-  if (CREATING) return;                // <- candado anti doble submit
+  if (CREATING) return;
   CREATING = true;
 
   const form = ev.currentTarget;
@@ -76,16 +202,17 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
 
     // refresco el estado justo antes de chequear duplicado
     const data = getData();
-    const dup = data.products.find(p => slugId(p.id) === id);
-    if (dup) throw new Error(`El ID ya existe: ${dup.id}`);
+    if (data.products.find(p => slugId(p.id) === id)) {
+      throw new Error(`El ID ya existe: ${id}`);
+    }
 
     const prod = {
       id,
-      name: f.get('name').trim(),
-      subtitle: f.get('subtitle').trim(),
+      name: (f.get('name')||'').trim(),
+      subtitle: (f.get('subtitle')||'').trim(),
       price: Number(f.get('price')||0),
-      league: f.get('league').trim(),
-      version: f.get('version').trim(),
+      league: (f.get('league')||'').trim(),
+      version: (f.get('version')||'').trim(),
       retro: (f.get('retro') === 'true'),
       images: imgs,
       sizes: {
@@ -96,8 +223,10 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
       enabled: true
     };
 
-    data.products.push(prod);
-    saveData(data);
+    const next = getData();
+    next.products.push(prod);
+    // guardo con versión remota para que el front (scripts.js) lo tome como válido
+    saveData({ version: REMOTE_VERSION, products: next.products });
 
     // limpieza + refresh UI
     form.reset();
@@ -111,72 +240,6 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
     btn?.removeAttribute('disabled');
     if (btn) btn.textContent = 'Agregar';
   }
-});
-
-
-// ====== Login ======
-$('#btnLogin').addEventListener('click', async ()=>{
-  const p = $('#adminPass').value.trim();
-  if (p !== ADMIN_PASSWORD) { alert('Contraseña incorrecta'); return; }
-  $('#loginBox').classList.add('d-none');
-  $('#adminUI').classList.remove('d-none');
-  if (!localStorage.getItem(LS_KEY_PRODUCTS)) saveData(await loadBaseData());
-  render();
-});
-$('#btnReload').addEventListener('click', render);
-
-// ====== Export / Import / Clear ======
-$('#btnExport').addEventListener('click', ()=>{
-  const blob = new Blob([JSON.stringify(getData(), null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'products.json'; a.click();
-  URL.revokeObjectURL(url);
-});
-$('#fileImport').addEventListener('change', async (ev)=>{
-  const file = ev.target.files[0]; if(!file) return;
-  try{
-    const obj = JSON.parse(await file.text());
-    if(!obj || !Array.isArray(obj.products)) throw new Error('formato inválido');
-    saveData(obj); render(); alert('Importado ✔');
-  }catch(e){ alert('No se pudo importar: ' + e.message); }
-  finally { ev.target.value=''; }
-});
-$('#btnClear').addEventListener('click', ()=>{
-  if(!confirm('¿Borrar override y volver al products.json del repo?')) return;
-  localStorage.removeItem(LS_KEY_PRODUCTS); render(true); alert('Listo ✔');
-});
-
-// ====== Alta (solo archivos locales) ======
-$('#formCreate').addEventListener('submit', async (ev)=>{
-  ev.preventDefault();
-  const f = new FormData(ev.currentTarget);
-
-  const imgs = await filesToDataUrls($('#fileImages').files, 8); // hasta 8
-  if (imgs.length === 0) { alert('Subí al menos una foto'); return; }
-
-  const prod = {
-    id: f.get('id').trim(),
-    name: f.get('name').trim(),
-    subtitle: f.get('subtitle').trim(),
-    price: Number(f.get('price')||0),
-    league: f.get('league').trim(),
-    version: f.get('version').trim(),
-    retro: (f.get('retro') === 'true'),
-    images: imgs, // solo de la PC
-    sizes: {
-      S: Number(f.get('S')||0), M: Number(f.get('M')||0), L: Number(f.get('L')||0),
-      XL:Number(f.get('XL')||0), XXL:Number(f.get('XXL')||0),
-    },
-    tags: (f.get('tags')||'').split(',').map(s=>s.trim()).filter(Boolean),
-    enabled: true
-  };
-
-  const data = getData();
-  if(!prod.id || !prod.name){ alert('ID y Nombre son obligatorios'); return; }
-  if (data.products.some(x=>x.id===prod.id)) { alert('El ID ya existe'); return; }
-
-  data.products.push(prod); saveData(data);
-  ev.currentTarget.reset(); $('#filePreview').innerHTML = ''; alert('Agregada ✔'); render();
 });
 
 // ====== Render tabla (gestión de fotos locales) ======
@@ -237,9 +300,8 @@ function render(skipCount){
     // eliminar una foto
     tr.querySelectorAll('[data-delimg]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const i = +btn.dataset.delimg;
         const d = getData();
-        d.products[idx].images.splice(i,1);
+        d.products[idx].images.splice(+btn.dataset.delimg,1);
         saveData(d); render();
       });
     });
@@ -296,6 +358,7 @@ function render(skipCount){
     tr.querySelector('[data-act="delete"]').addEventListener('click', ()=>{
       if(!confirm(`Eliminar "${p.name}" del override?`)) return;
       const d = getData(); d.products.splice(idx,1); saveData(d); tr.remove();
+      $('#count').textContent = d.products.length;
     });
 
     $('#tbody').appendChild(tr);
