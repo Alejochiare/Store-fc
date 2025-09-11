@@ -166,46 +166,14 @@
               </div>
             </form>
           </div>
-        </div>  
+        </div>
       </div>
     </div>
-
 
     <!-- Bootstrap core JS-->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Core theme JS-->
-     <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
-  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
-  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js";
-
-  // ⬇️ Reemplazá por TU config (la que te muestra Firebase)
-  const firebaseConfig = {
-    apiKey: "AIzaSyDaJItnghaXvtIvtuInzk-BgMRtR531504",
-    authDomain: "store-fc-168ec.firebaseapp.com",
-    projectId: "store-fc-168ec",
-    storageBucket: "store-fc-168ec.appspot.com",
-    messagingSenderId: "775218884905",
-    appId: "1:775218884905:web:3a911e74695f8fc9240738",
-    measurementId: "G-W6QH9D23L"
-  };
-
-  const app   = initializeApp(firebaseConfig);
-  const db    = getFirestore(app);
-  const auth  = getAuth(app);
-  const store = getStorage(app);
-
-  // Lo expongo para usarlo en scripts.js (y luego en admin)
-  window.fb = { app, db, auth, store,
-    getDocs, collection, addDoc, doc, setDoc, updateDoc, deleteDoc,
-    signInWithEmailAndPassword, onAuthStateChanged, signOut,
-    ref, uploadBytes, getDownloadURL
-  };
-</script>
-
-<script src="js/scripts.js?v=firebase2" defer></script>
-
+    <script src="js/scripts.js"></script>
 
     <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A (o Cmd+Alt+A en Mac) -->
     <script>

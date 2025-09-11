@@ -1,4 +1,6 @@
-// ====== Data source (LocalStorage / JSON fallback) ======
+// ====== Config ======
+
+// ====== Admin Store ======
 const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guardará admin
 const DATA_URL_FALLBACK = 'data/products.json';    // tu json actual en /data
 
@@ -23,24 +25,6 @@ const getCart = () => JSON.parse(localStorage.getItem('cart') || '[]');
 const setCart = (c) => (localStorage.setItem('cart', JSON.stringify(c)), updateCartBadge());
 const updateCartBadge = () => { const c = getCart(); $('#cartCount') && ($('#cartCount').textContent = c.reduce((a,i)=>a+i.qty,0)); };
 
-// Normaliza rutas de imágenes: ../assets..., ./assets..., /assets..., backslashes, etc.
-function normalizeAsset(src) {
-  if (!src) return '';
-  let s = String(src).trim();
-  // URLs absolutas (http/https/data) se dejan como están
-  if (/^(https?:|data:)/i.test(s)) return s;
-  // Windows -> Unix
-  s = s.replace(/\\/g, '/');
-  // Si contiene "/assets/...", recortamos desde ahí
-  const m = s.match(/\/assets\/.*/);
-  if (m) return m[0].replace(/^\/+/, ''); // => "assets/..."
-  // Quita ../ ./ y / inicial
-  s = s.replace(/^(?:\.\.\/)+/, '')
-       .replace(/^\.\//, '')
-       .replace(/^\/+/, '');
-  return s;
-}
-
 // Abrir WhatsApp sin duplicados (evita null por noopener/noreferrer)
 function openWhatsApp(url){
   // abrir en nueva pestaña (sin 3er parámetro para no provocar null)
@@ -59,37 +43,12 @@ const FILTERS = { q:'', league:'', version:'', retro:false };
 // ====== Carga de productos ======
 async function loadProducts(){
   if (PRODUCTS.length) return PRODUCTS;
-
-  // 1) Intento en vivo: Firestore (si pegaste el bloque window.fb en los HTML)
-  if (window.fb?.db) {
-    try {
-      const snap = await window.fb.getDocs(window.fb.collection(window.fb.db, 'products'));
-      PRODUCTS = snap.docs
-        .map(d => {
-          const p = { id: d.id, ...d.data() };
-          return {
-            ...p,
-            images: (p.images || []).map(normalizeAsset),
-          };
-        })
-        .filter(p => p.enabled !== false);
-      return PRODUCTS;
-    } catch (e) {
-      console.warn('Firestore falló, uso fallback (LS/JSON):', e);
-    }
-  }
-
-  // 2) Fallback: override en localStorage o JSON del repo
   try {
-    const data = await loadProductsData(); // { products: [...] }
-    PRODUCTS = (data.products || [])
-      .filter(p => p.enabled !== false)
-      .map(p => ({
-        ...p,
-        images: (p.images || []).map(normalizeAsset),
-      }));
+    const data = await loadProductsData();
+    // Filtra items con enabled === false (eliminados desde admin)
+    PRODUCTS = (data.products || []).filter(p => p.enabled !== false);
   } catch (e) {
-    console.warn('Error cargando productos (fallback):', e);
+    console.warn('Error cargando productos:', e);
     PRODUCTS = [];
     const grid = document.querySelector('#productGrid');
     if (grid) grid.innerHTML = `<div class="col-12">
@@ -124,7 +83,8 @@ function availableFor(p, size, excludeIndex = null){
 // ====== Home (grid + filtros) ======
 function applyFilters(list){
   let out = [...list];
-  out = out.filter(p => p.enabled !== false); // por si acaso
+  // por si acaso, vuelve a excluir deshabilitados
+  out = out.filter(p => p.enabled !== false);
   const q = FILTERS.q.trim().toLowerCase();
   if (q) out = out.filter(p => [p.name, p.subtitle, p.league, p.version, ...(p.tags||[])].join(' ').toLowerCase().includes(q));
   if (FILTERS.league) out = out.filter(p => p.league === FILTERS.league);
