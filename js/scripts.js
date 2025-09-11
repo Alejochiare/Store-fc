@@ -94,10 +94,13 @@ function effectiveSizes(p){
   return out;
 }
 function availableFor(p, size, excludeIndex = null){
-  const base = (p.sizes?.[size] || 0);
-  const reserved = reservedQty(p.id, size, excludeIndex);
+  // p puede no existir (producto borrado o ID viejo en el carrito)
+  const base = p?.sizes?.[size] || 0;
+  const pid  = p?.id; // undefined si no existe => reservedQty no suma nada
+  const reserved = reservedQty(pid, size, excludeIndex);
   return Math.max(0, base - reserved);
 }
+
 
 // ====== Home (grid + filtros) ======
 function applyFilters(list){
@@ -298,33 +301,37 @@ async function renderCart(){
     <div class="table-responsive">
       <table class="table align-middle">
         <thead><tr>
-          <th>Producto</th><th class="text-center">Talle</th><th style="width:130px;">Cantidad</th>
-          <th>Subtotal</th><th></th>
+          <th>Producto</th><th class="text-center">Talle</th>
+          <th style="width:130px;">Cantidad</th><th>Subtotal</th><th></th>
         </tr></thead>
         <tbody>
           ${cart.map((i,idx)=> {
-            const p = PRODUCTS.find(x=>x.id===i.productId) || {};
+            const p = PRODUCTS.find(x=>x.id===i.productId) || {}; // <— clave
             const max = availableFor(p, i.size, idx);
+            const name = i.name || p.name || 'Producto';
+            const price = i.price ?? p.price ?? 0;
             return `
               <tr>
-                <td>${i.name || p.name || 'Producto'}</td>
+                <td>${name}</td>
                 <td class="text-center">${i.size}</td>
                 <td>
                   <input type="number" min="1" max="${Math.max(1,max)}"
-                         class="form-control form-control-sm qty" data-idx="${idx}" value="${i.qty}">
+                         class="form-control form-control-sm qty" data-idx="${idx}" value="${i.qty||1}">
                   <div class="form-text">Disp.: ${max}</div>
                 </td>
-                <td>${money((i.price||0)*(i.qty||0))}</td>
+                <td>${money((price||0)*(i.qty||0))}</td>
                 <td class="text-end">
                   <button class="btn btn-sm btn-outline-danger del" data-idx="${idx}">
                     <i class="bi bi-trash"></i>
                   </button>
                 </td>
-              </tr>`;
+              </tr>
+            `;
           }).join('')}
         </tbody>
       </table>
-    </div>`;
+    </div>
+  `;
 
   $$('#cartView .qty').forEach(inp => inp.addEventListener('input', e => {
     const idx = +e.target.dataset.idx;
