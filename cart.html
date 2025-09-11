@@ -6,6 +6,30 @@
   <title>Carrito · Store FC</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="css/styles.css?v=20251009" rel="stylesheet">
+  <style>
+    /* Tap-friendly */
+    button, .btn, input, select { min-height: 44px; }
+    /* Ocultar "Forzar recarga" en XS */
+    @media (max-width:576px){ .force-reload { display:none !important; } }
+
+    /* Sticky checkout bar en móvil */
+    .mobile-checkout-bar{
+      position:fixed; left:0; right:0; bottom:0; z-index:1030;
+      background:#fff; border-top:1px solid #e5e5e5;
+      padding:.75rem .95rem; display:none; align-items:center; justify-content:space-between; gap:.75rem;
+    }
+    .mobile-checkout-bar .total{font-weight:700}
+    @media (max-width:576px){
+      body{ padding-bottom:90px; } /* espacio para la barra */
+      .mobile-checkout-bar{ display:flex; }
+    }
+
+    /* Ajustes de contenedor en XS */
+    @media (max-width:576px){
+      main.container{ padding-top:1.25rem !important; }
+      h3{ font-size:1.25rem; }
+    }
+  </style>
 </head>
 <body data-page="cart">
   <nav class="navbar navbar-expand-lg navbar-light bg-light">
@@ -17,8 +41,7 @@
           <i class="bi bi-cart-fill me-1"></i> Carrito
           <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
         </a>
-        <!-- Forzar recarga limpia override local (?reset=1) -->
-        <a class="btn btn-link text-decoration-none" href="cart.html?reset=1" title="Limpiar datos locales">
+        <a class="btn btn-link text-decoration-none force-reload" href="cart.html?reset=1" title="Limpiar datos locales">
           Forzar recarga
         </a>
       </div>
@@ -28,14 +51,15 @@
   <main class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h3 class="m-0">Tu carrito</h3>
-      <button class="btn btn-outline-secondary btn-sm" onclick="localStorage.removeItem('cart'); location.reload()">
+      <button class="btn btn-outline-secondary btn-sm"
+              onclick="localStorage.removeItem('cart'); location.reload()">
         Vaciar carrito
       </button>
     </div>
 
     <div id="cartView"></div>
 
-    <div class="d-flex justify-content-between mt-3">
+    <div class="d-flex justify-content-between mt-3 d-none d-sm-flex">
       <a class="btn btn-outline-secondary" href="index.html">Seguir comprando</a>
       <div>
         <strong class="me-3">Total: <span id="cartTotal">$0</span></strong>
@@ -46,7 +70,33 @@
     </div>
   </main>
 
+  <!-- Barra sticky móvil -->
+  <div class="mobile-checkout-bar d-sm-none">
+    <div class="total">Total: <span id="cartTotalMobile">$0</span></div>
+    <button id="checkoutBtnMobile" class="btn btn-dark flex-grow-1">
+      <i class="bi bi-whatsapp me-1"></i> Finalizar compra
+    </button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/scripts.js?v=20251009"></script>
+  <script>
+    // Sincroniza total y botón con la barra móvil
+    (function(){
+      const total = document.getElementById('cartTotal');
+      const totalMob = document.getElementById('cartTotalMobile');
+      const btnDesk = document.getElementById('checkoutBtn');
+      const btnMob  = document.getElementById('checkoutBtnMobile');
+
+      if (btnDesk && btnMob) btnMob.addEventListener('click', () => btnDesk.click());
+
+      if (total && totalMob) {
+        const sync = () => { totalMob.textContent = total.textContent; };
+        sync();
+        // Observa cambios en el nodo de total
+        new MutationObserver(sync).observe(total, { childList:true, characterData:true, subtree:true });
+      }
+    })();
+  </script>
 </body>
 </html>

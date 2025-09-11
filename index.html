@@ -12,6 +12,22 @@
       .card-img-top { height: 260px; object-fit: cover; }
       header .display-5 { font-size: 2.4rem; }
       header .lead { opacity: .85; }
+      button, .btn, input, select { min-height:44px; }
+
+      /* Ajustes mobile */
+      @media (max-width:576px){
+        .card-img-top { height: 170px; }
+        header .display-5 { font-size: 1.75rem; }
+        header .lead { font-size: .95rem; }
+        .force-reload { display:none !important; }
+        .filters-toggle{ display:block; }
+        .filters-collapsible{ display:none; }
+        .filters-collapsible.show{ display:block; }
+        section.py-3.bg-light{ padding-top:.75rem !important; padding-bottom:.75rem !important; }
+      }
+
+      /* Botón "Filtros" oculto en ≥SM */
+      .filters-toggle{ display:none; }
     </style>
   </head>
   <body data-page="index">
@@ -40,8 +56,7 @@
               Carrito
               <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
             </a>
-            <!-- Limpia override local y fuerza a tomar la última versión -->
-            <a class="btn btn-link text-decoration-none" href="index.html?reset=1" title="Limpiar datos locales">
+            <a class="btn btn-link text-decoration-none force-reload" href="index.html?reset=1" title="Limpiar datos locales">
               Forzar recarga
             </a>
           </div>
@@ -62,7 +77,12 @@
     <!-- Filtros -->
     <section class="py-3 border-bottom bg-light">
       <div class="container px-4 px-lg-5">
-        <form class="row g-2 align-items-end">
+        <!-- Toggle visible en XS -->
+        <button id="filtersBtn" class="btn btn-outline-secondary w-100 mb-2 filters-toggle">
+          <i class="bi bi-sliders me-1"></i> Filtros
+        </button>
+
+        <form id="filtersForm" class="row g-2 align-items-end filters-collapsible">
           <div class="col-12 col-md-4">
             <label class="form-label mb-1">Buscar</label>
             <input id="searchInput" class="form-control" type="search" placeholder="River, Boca, Premier..." />
@@ -181,6 +201,15 @@
           window.location.href = 'admin.html';
         }
       });
+
+      // Toggle filtros en XS
+      const btn = document.getElementById('filtersBtn');
+      const form = document.getElementById('filtersForm');
+      btn?.addEventListener('click', ()=> form.classList.toggle('show'));
+      // Si no es XS, mostrar siempre
+      const mq = window.matchMedia('(min-width: 577px)');
+      const syncFilters = () => { form?.classList.toggle('show', mq.matches); };
+      syncFilters(); mq.addEventListener?.('change', syncFilters);
     </script>
   </body>
 </html>

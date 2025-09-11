@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#0f1113"/>
   <title>Admin – Store</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body{background:#0f1113;color:#e9ecef}
-    .card{background:#161a1d;border-color:#222}
-    .form-control,.form-select{background:#0f1113;color:#e9ecef;border-color:#333}
+    :root{--bg:#0f1113;--card:#161a1d;--border:#222;--border2:#333;--text:#e9ecef}
+    html,body{height:100%}
+    body{background:var(--bg);color:var(--text)}
+    .card{background:var(--card);border-color:var(--border)}
+    .form-control,.form-select{background:var(--bg);color:var(--text);border-color:var(--border2)}
     .btn{border-radius:12px}
     .img-thumb{width:56px;height:56px;object-fit:cover;border-radius:8px}
     .thumb{position:relative;display:inline-block;margin:.2rem}
@@ -16,6 +19,49 @@
     table td, table th { vertical-align: middle; }
     .small-help{opacity:.7}
     code{color:#9ed0ff}
+
+    /* Mejoras generales touch */
+    input,select,button{min-height:44px}
+    .btn-sm-touch{padding:.5rem .75rem;font-size:.95rem}
+
+    /* Barra de acciones sticky en mobile */
+    .actions-sticky{position:sticky;bottom:0;z-index:1000;background:rgba(22,26,29,.92);backdrop-filter:blur(8px);border-top:1px solid #222}
+
+    /* Tabla: versión compacta en pantallas chicas */
+    @media (max-width: 576px){
+      body{padding:.75rem !important}
+      h1{font-size:1.25rem}
+      .card{padding:.75rem !important}
+      .img-thumb{width:48px;height:48px}
+
+      /* Ocultamos columnas menos críticas en XS:
+         1=Fotos 2=ID 3=Nombre 4=Precio 5=Liga 6=Versión 7=Retro 8=Visible
+         9=S 10=M 11=L 12=XL 13=XXL 14=Acciones
+      */
+      thead th:nth-child(2),
+      thead th:nth-child(5),
+      thead th:nth-child(6),
+      thead th:nth-child(7),
+      thead th:nth-child(8),
+      thead th:nth-child(9),
+      thead th:nth-child(10),
+      thead th:nth-child(11),
+      thead th:nth-child(12),
+      thead th:nth-child(13),
+      tbody td:nth-child(2),
+      tbody td:nth-child(5),
+      tbody td:nth-child(6),
+      tbody td:nth-child(7),
+      tbody td:nth-child(8),
+      tbody td:nth-child(9),
+      tbody td:nth-child(10),
+      tbody td:nth-child(11),
+      tbody td:nth-child(12),
+      tbody td:nth-child(13){display:none}
+
+      .table td,.table th{padding:.5rem .4rem;font-size:.95rem}
+      .table .btn{padding:.35rem .55rem;font-size:.9rem}
+    }
   </style>
 </head>
 <body class="p-3">
@@ -23,7 +69,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h1 class="m-0">Panel de administración</h1>
       <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="./index.html">Ver tienda</a>
+        <a class="btn btn-outline-secondary btn-sm-touch" href="./index.html">Ver tienda</a>
       </div>
     </div>
 
@@ -46,18 +92,17 @@
 
     <div id="adminUI" class="d-none">
       <!-- acciones superiores -->
-<div class="card p-3 mb-3">
-  <div class="d-flex flex-wrap gap-2">
-    <button id="btnPublish" class="btn btn-primary">Publicar cambios</button>
-    <button id="btnExport" class="btn btn-success">Exportar JSON</button>
-    <label class="btn btn-outline-light m-0">
-      Importar JSON <input id="fileImport" type="file" accept="application/json" hidden>
-    </label>
-    <button id="btnClear" class="btn btn-outline-danger">Borrar override</button>
-    <div class="ms-auto small-help">Total productos: <span id="count"></span></div>
-  </div>
-</div>
-
+      <div id="actionsBar" class="card p-3 mb-3 actions-sticky">
+        <div class="d-flex flex-wrap gap-2">
+          <button id="btnPublish" class="btn btn-primary">Publicar cambios</button>
+          <button id="btnExport" class="btn btn-success">Exportar JSON</button>
+          <label class="btn btn-outline-light m-0">
+            Importar JSON <input id="fileImport" type="file" accept="application/json" hidden>
+          </label>
+          <button id="btnClear" class="btn btn-outline-danger">Borrar override</button>
+          <div class="ms-auto small-help">Total productos: <span id="count"></span></div>
+        </div>
+      </div>
 
       <!-- alta -->
       <div class="card p-3 mb-3">

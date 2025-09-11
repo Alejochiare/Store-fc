@@ -7,6 +7,27 @@
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
   <link href="css/styles.css?v=20251009" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    button, .btn, input, select { min-height:44px; }
+    /* Ocultar "Forzar recarga" en XS */
+    @media (max-width:576px){ .force-reload { display:none !important; } }
+
+    /* Barra de acción móvil (intenta espejar "Agregar al carrito") */
+    .mobile-action-bar{
+      position:fixed; left:0; right:0; bottom:0; z-index:1030;
+      background:#fff; border-top:1px solid #e5e5e5;
+      padding:.75rem .95rem; display:none; gap:.5rem;
+    }
+    @media (max-width:576px){
+      body{ padding-bottom:90px; }
+      .mobile-action-bar{ display:flex; }
+    }
+
+    /* Ajustes visuales en XS */
+    @media (max-width:576px){
+      main.container{ padding-top:1.25rem !important; }
+    }
+  </style>
 </head>
 <body data-page="product">
   <nav class="navbar navbar-expand-lg navbar-light bg-light">
@@ -18,8 +39,7 @@
           <i class="bi bi-cart-fill me-1"></i> Carrito
           <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
         </a>
-        <!-- Forzar recarga: limpia override local y recarga preservando ?id= -->
-        <a id="forceReload" class="btn btn-link text-decoration-none" href="#" title="Limpiar datos locales">
+        <a id="forceReload" class="btn btn-link text-decoration-none force-reload" href="#" title="Limpiar datos locales">
           Forzar recarga
         </a>
       </div>
@@ -30,16 +50,68 @@
     <div id="productView" class="row g-4"></div>
   </main>
 
+  <!-- Barra acción móvil -->
+  <div class="mobile-action-bar d-sm-none">
+    <button id="mobileAddToCart" class="btn btn-dark flex-grow-1">
+      <i class="bi bi-bag-plus me-1"></i> Agregar al carrito
+    </button>
+    <a class="btn btn-outline-secondary" href="cart.html">
+      Ver carrito
+    </a>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/scripts.js?v=20251009"></script>
 
   <script>
-    // Limpia el override local y recarga manteniendo el ?id=
+    // Limpia override local y recarga manteniendo el ?id=
     document.getElementById('forceReload')?.addEventListener('click', function (e) {
       e.preventDefault();
       localStorage.removeItem('admin_products_override');
       location.reload(); // preserva la query actual (incluye id)
     });
+
+    // Intento de "enganchar" el botón Agregar original para que el móvil lo dispare
+    (function(){
+      const root = document.getElementById('productView');
+      const btnMobile = document.getElementById('mobileAddToCart');
+
+      function findAddBtn(){
+        // selectores comunes
+        const sel = [
+          '#productView button#addToCart',
+          '#productView button.btn-add-cart',
+          '#productView button[data-add]',
+          '#productView button[data-action="add"]',
+          '#productView button[name="add"]',
+          '#productView .btn.btn-dark',      // fallback razonable
+          '#productView button.btn-primary'   // fallback
+        ];
+        for (const s of sel){
+          const b = document.querySelector(s);
+          if (b) return b;
+        }
+        // búsqueda por texto
+        const cand = [...root.querySelectorAll('button, a.btn')].find(x =>
+          /agregar|añadir|carrito|add to cart/i.test(x.textContent || '')
+        );
+        return cand || null;
+      }
+
+      function wire(){
+        const target = findAddBtn();
+        if (!target) { btnMobile.disabled = true; btnMobile.textContent = 'Cargando…'; return; }
+        btnMobile.disabled = false;
+        btnMobile.textContent = 'Agregar al carrito';
+        btnMobile.onclick = () => target.click();
+      }
+
+      // Observa cuando scripts.js renderiza el producto
+      const obs = new MutationObserver(wire);
+      obs.observe(root, { childList:true, subtree:true });
+      // Intento inicial
+      wire();
+    })();
   </script>
 </body>
 </html>
