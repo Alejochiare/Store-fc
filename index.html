@@ -8,8 +8,8 @@
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
     <!-- Bootstrap icons-->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
-    <!-- Core theme CSS (includes Bootstrap)-->
-    <link href="css/styles.css" rel="stylesheet" />
+    <!-- ÚNICO CSS (versionado para cache bust) -->
+    <link href="css/styles.css?v=20251009" rel="stylesheet" />
     <style>
       /* ayuda para que las fotos queden prolijas */
       .card-img-top { height: 260px; object-fit: cover; }
@@ -17,6 +17,7 @@
       header .lead { opacity: .85; }
     </style>
   </head>
+
   <!-- data-page="index" le dice al JS qué renderizar -->
   <body data-page="index">
     <!-- Navigation-->
@@ -44,9 +45,6 @@
         </div>
       </div>
     </nav>
-<!-- en index.html / product.html / cart.html -->
-<link href="css/styles.css?v=20251009" rel="stylesheet">
-<script src="js/scripts.js?v=20251009"></script>
 
     <!-- Header-->
     <header class="bg-dark py-5">
@@ -175,8 +173,8 @@
 
     <!-- Bootstrap core JS-->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Core theme JS-->
-    <script src="js/scripts.js"></script>
+    <!-- ÚNICO JS (versionado para cache bust) -->
+    <script src="js/scripts.js?v=20251009"></script>
 
     <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A (o Cmd+Alt+A en Mac) -->
     <script>
