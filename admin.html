@@ -46,18 +46,18 @@
 
     <div id="adminUI" class="d-none">
       <!-- acciones superiores -->
-      <div class="card p-3 mb-3">
-        <div class="d-flex flex-wrap gap-2">
-          <button id="btnExport" class="btn btn-success">Exportar JSON</button>
+<div class="card p-3 mb-3">
+  <div class="d-flex flex-wrap gap-2">
+    <button id="btnPublish" class="btn btn-primary">Publicar cambios</button>
+    <button id="btnExport" class="btn btn-success">Exportar JSON</button>
+    <label class="btn btn-outline-light m-0">
+      Importar JSON <input id="fileImport" type="file" accept="application/json" hidden>
+    </label>
+    <button id="btnClear" class="btn btn-outline-danger">Borrar override</button>
+    <div class="ms-auto small-help">Total productos: <span id="count"></span></div>
+  </div>
+</div>
 
-          <label class="btn btn-out<button id="btnPublish" class="btn btn-primary">Publicar cambios</button>
-line-light m-0">
-            Importar JSON <input id="fileImport" type="file" accept="application/json" hidden>
-          </label>
-          <button id="btnClear" class="btn btn-outline-danger">Borrar override</button>
-          <div class="ms-auto small-help">Total productos: <span id="count"></span></div>
-        </div>
-      </div>
 
       <!-- alta -->
       <div class="card p-3 mb-3">
