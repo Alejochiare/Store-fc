@@ -1,15 +1,19 @@
+// ==============================
+// scripts.js  (reemplazar todo)
+// ==============================
+
 // ====== Config ======
-const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guarda el panel admin
-const ASSET_VERSION   = '20251009';                // cambialo cuando subas JSON nuevo
-const DATA_URL_FALLBACK = `data/products.json?v=${ASSET_VERSION}`; // JSON del repo (anti-caché)
-const WHATSAPP_PHONE = '5493563491364';            // 549 + area sin 0 + número sin 15
-const SHEETS_ENDPOINT = '';                         // opcional: Apps Script para loguear ventas
+const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guarda el panel admin (con versión)
+const DATA_URL        = 'data/products.json';      // JSON canónico del repo
+const VERSION_URL     = 'data/version.json';       // { "version": "..." }
+const WHATSAPP_PHONE  = '5493563491364';           // 549 + area sin 0 + número sin 15
+const SHEETS_ENDPOINT = '';                        // opcional: Apps Script para loguear ventas
 
 // ====== Helpers ======
 const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const money = n => new Intl.NumberFormat('es-AR', {
-  style: 'currency', currency: 'ARS', maximumFractionDigits: 0
+  style:'currency', currency:'ARS', maximumFractionDigits:0
 }).format(Number.isFinite(+n) ? +n : 0);
 
 const getCart = () => JSON.parse(localStorage.getItem('cart') || '[]');
@@ -22,12 +26,13 @@ const updateCartBadge = () => {
 
 // Abrir WhatsApp sin duplicados
 function openWhatsApp(url) {
-  const win = window.open(url, '_blank');
+  // abre una sola pestaña; si el navegador bloquea popups, hacemos fallback a location
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
   if (win && !win.closed) { try { win.opener = null; } catch(_) {} return; }
   window.location.assign(url);
 }
 
-// ====== Carga/normalización de productos ======
+// ====== Normalización ======
 function normalizeArray(raw) {
   const arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.products) ? raw.products : []);
   return arr.map((p, idx) => ({
@@ -39,56 +44,80 @@ function normalizeArray(raw) {
     version  : p.version || '',
     retro    : !!p.retro,
     images   : Array.isArray(p.images) ? p.images : (Array.isArray(p.imgs) ? p.imgs : []),
-    sizes    : typeof p.sizes === 'object' && p.sizes ? p.sizes : (typeof p.talles === 'object' && p.talles ? p.talles : {}),
+    sizes    : typeof p.sizes === 'object' && p.sizes ? p.sizes
+               : (typeof p.talles === 'object' && p.talles ? p.talles : {}),
     tags     : Array.isArray(p.tags) ? p.tags : [],
     enabled  : p.enabled !== false
   }));
 }
 
-async function loadProductsData() {
-  // 1) Override guardado por Admin (solo si trae ítems)
-  const ls = localStorage.getItem(LS_KEY_PRODUCTS);
-  if (ls) {
-    try {
-      const norm = normalizeArray(JSON.parse(ls));
-      if (norm.length > 0) return norm;
-      console.warn('Override vacío/mal formado; uso fallback JSON');
-    } catch (e) {
-      console.warn('Override LS corrupto, uso fallback:', e);
-    }
-  }
-  // 2) JSON del repo (anti-caché por versión)
-  const r = await fetch(DATA_URL_FALLBACK, { cache: 'no-store' });
-  if (!r.ok) throw new Error(`No se pudo leer ${DATA_URL_FALLBACK} (${r.status})`);
-  return normalizeArray(await r.json());
-}
+// ====== Fetch utils ======
+const fetchJSON = async (url) => {
+  const r = await fetch(url, { cache: 'no-store' }); // fuerza red a CDN
+  if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
+  return r.json();
+};
 
+// ====== Catálogo (con versión + override) ======
 let PRODUCTS = [];
-const FILTERS = { q:'', league:'', version:'', retro:false };
+let CURRENT_VERSION = '0';
 
 async function loadProducts() {
   if (PRODUCTS.length) return PRODUCTS;
+
+  // 1) traigo versión remota (si falla, uso '0')
   try {
-    const list = await loadProductsData();
-    PRODUCTS = list.filter(p => p.enabled !== false);
-  } catch (e) {
-    console.warn('Error cargando productos:', e);
-    PRODUCTS = [];
-    const grid = $('#productGrid');
-    if (grid) grid.innerHTML = `
-      <div class="col-12">
-        <div class="alert alert-danger">
-          No pude cargar productos (override local o <code>data/products.json</code>).
-          <button id="forceReload" class="btn btn-sm btn-outline-dark ms-2">Forzar recarga</button>
-        </div>
-      </div>`;
-    $('#forceReload')?.addEventListener('click', () => {
-      localStorage.removeItem(LS_KEY_PRODUCTS);
-      location.reload();
-    });
+    const v = await fetchJSON(VERSION_URL);
+    CURRENT_VERSION = String(v.version || '0');
+  } catch(_) {
+    CURRENT_VERSION = '0';
   }
+
+  // 2) pido JSON remoto rompiendo caché del CDN
+  let remoteProducts = [];
+  try {
+    const remote = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(CURRENT_VERSION)}`);
+    remoteProducts = normalizeArray(remote);
+  } catch (e) {
+    console.warn('No pude leer data/products.json:', e);
+  }
+
+  // 3) override local del admin
+  let override = null;
+  try {
+    override = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
+  } catch(_) { override = null; }
+
+  // admite formato { version, products: [...] } o bien un array suelto (legacy)
+  const overrideVersion = override && (override.version || '0');
+  const overrideList    = override && (Array.isArray(override.products) ? override.products : (Array.isArray(override) ? override : null));
+  const normOverride    = normalizeArray(overrideList || []);
+
+  // 4) decido fuente
+  const useOverride = normOverride.length > 0 && overrideVersion === CURRENT_VERSION;
+  PRODUCTS = (useOverride ? normOverride : remoteProducts).filter(p => p.enabled !== false);
+
+  // 5) si hay override pero de versión distinta, lo limpio
+  if (override && overrideVersion !== CURRENT_VERSION) {
+    localStorage.removeItem(LS_KEY_PRODUCTS);
+  }
+
+  // 6) si no hay nada, muestro error amigable
+  if (!PRODUCTS.length) {
+    const grid = $('#productGrid');
+    if (grid) {
+      grid.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-danger">
+            No pude cargar productos. Probá <a href="?reset=1" class="alert-link">forzar recarga</a>.
+          </div>
+        </div>`;
+    }
+  }
+
   return PRODUCTS;
 }
+
 const findProduct = id => PRODUCTS.find(p => p.id === id);
 
 // ====== Stock efectivo (resta lo que hay en carrito) ======
@@ -112,6 +141,8 @@ function availableFor(p, size, excludeIndex = null){
 }
 
 // ====== Home (grid + filtros) ======
+const FILTERS = { q:'', league:'', version:'', retro:false };
+
 function applyFilters(list){
   let out = list.filter(p => p.enabled !== false);
   const q = FILTERS.q.trim().toLowerCase();
@@ -258,8 +289,8 @@ async function renderProduct(){
     const avail = availableFor(p, size);
     if (avail <= 0 || qty > avail) return alert('Cantidad supera el stock disponible.');
     const line = `• ${qty}× ${p.name || 'Producto'} (talle ${size}) — ${money(p.price*qty)}`;
-    const msg = `Hola! Quiero comprar:%0A${line}%0A%0ATotal: ${encodeURIComponent(money(p.price*qty))}`;
-    const url = `https://wa.me/${WHATSAPP_PHONE}?text=${msg}`;
+    const msg = `Hola! Quiero comprar:\n${line}\n\nTotal: ${money(p.price*qty)}`;
+    const url = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
     openWhatsApp(url);
   });
 }
@@ -364,9 +395,9 @@ async function checkout(){
   const cart = getCart();
   if (!cart.length) return alert('El carrito está vacío.');
   const total = cartTotal();
-  const lines = cart.map(i => `• ${i.qty}× ${i.name} (talle ${i.size}) — ${money(i.price*i.qty)}`).join('%0A');
-  const msg = `Hola! Quiero comprar:%0A${lines}%0A%0ATotal: ${encodeURIComponent(money(total))}%0A%0ANombre:%0ADirección/Localidad:%0AMétodo de envío (Retiro/Envío):`;
-  const url = `https://wa.me/${WHATSAPP_PHONE}?text=${msg}`;
+  const lines = cart.map(i => `• ${i.qty}× ${i.name} (talle ${i.size}) — ${money(i.price*i.qty)}`).join('\n');
+  const msg = `Hola! Quiero comprar:\n${lines}\n\nTotal: ${money(total)}\n\nNombre:\nDirección/Localidad:\nMétodo de envío (Retiro/Envío):`;
+  const url = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
 
   if (SHEETS_ENDPOINT) {
     try {
@@ -393,13 +424,14 @@ function bindRequestForm(){
 
     try {
       const data = Object.fromEntries(new FormData(form).entries());
-      const text =
-        `Hola! Quiero pedir una camiseta que no veo en stock:%0A` +
-        `• Equipo: ${data.equipo}%0A• Liga: ${data.liga||'-'}%0A• Temporada: ${data.temporada||'-'}%0A` +
-        `• Versión: ${data.version||'-'}%0A• Talle: ${data.talle||'-'}%0A` +
-        `• Comentarios: ${data.comentarios||'-'}%0A%0A` +
-        `Mis datos:%0A• Nombre: ${data.nombre}%0A• Localidad: ${data.localidad||'-'}%0A• Contacto: ${data.contacto||'-'}`;
-      const url = `https://wa.me/${WHATSAPP_PHONE}?text=${text}`;
+      const msg =
+        `Hola! Quiero pedir una camiseta que no veo en stock:\n` +
+        `• Equipo: ${data.equipo}\n• Liga: ${data.liga||'-'}\n• Temporada: ${data.temporada||'-'}\n` +
+        `• Versión: ${data.version||'-'}\n• Talle: ${data.talle||'-'}\n` +
+        `• Comentarios: ${data.comentarios||'-'}\n\n` +
+        `Mis datos:\n• Nombre: ${data.nombre}\n• Localidad: ${data.localidad||'-'}\n• Contacto: ${data.contacto||'-'}`;
+
+      const url = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
 
       if (SHEETS_ENDPOINT) {
         try {
@@ -420,7 +452,7 @@ function bindRequestForm(){
 
 // === Pedido rápido (modal) -> WhatsApp ===
 function bindQuickOrderForm(){
-  const form = $('#quickOrderForm'); 
+  const form = $('#quickOrderForm');
   if (!form) return;
   if (form.dataset.bound) return;
   form.dataset.bound = '1';
@@ -436,17 +468,18 @@ function bindQuickOrderForm(){
       const numero  = (data.numero  || '').trim();
       const parches = (data.parches || '').trim();
 
-      const msg =
-`Pedido de remera
-Club: ${data.club}
-Año/Temporada: ${data.anio}
-Titular/Suplente: ${data.modelo}
-Versión: ${data.version}
-Dorsal: ${dorsal || 'sin dorsal'}
-Número: ${numero || '-'}
-Parches: ${parches || 'sin parches'}
-
-(Nota: si la querés sin dorsal/ni número/ni parches, dejá esos campos vacíos)`;
+      const msg = [
+        'Pedido de remera',
+        `Club: ${data.club}`,
+        `Año/Temporada: ${data.anio}`,
+        `Titular/Suplente: ${data.modelo}`,
+        `Versión: ${data.version}`,
+        `Dorsal: ${dorsal || 'sin dorsal'}`,
+        `Número: ${numero || '-'}`,
+        `Parches: ${parches || 'sin parches'}`,
+        '',
+        '(Nota: si la querés sin dorsal/ni número/ni parches, dejá esos campos vacíos)'
+      ].join('\n');
 
       const url = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
 

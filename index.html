@@ -6,7 +6,7 @@
     <meta name="description" content="Tienda de camisetas de fútbol" />
     <title>Store FC</title>
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
     <link href="css/styles.css?v=20251009" rel="stylesheet" />
     <style>
       .card-img-top { height: 260px; object-fit: cover; }
@@ -15,11 +15,14 @@
     </style>
   </head>
   <body data-page="index">
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
       <div class="container px-4 px-lg-5">
-        <a class="navbar-brand fw-bold" href="index.html">Nombre</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
-                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <a class="navbar-brand fw-bold" href="index.html">Store FC</a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent"
+                aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
 
@@ -30,24 +33,33 @@
               <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#pedidoModal">Hacé tu pedido</a>
             </li>
           </ul>
-          <a class="btn btn-outline-dark" href="cart.html">
-            <i class="bi-cart-fill me-1"></i>
-            Carrito
-            <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
-          </a>
+
+          <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-outline-dark" href="cart.html">
+              <i class="bi bi-cart-fill me-1"></i>
+              Carrito
+              <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
+            </a>
+            <!-- Limpia override local y fuerza a tomar la última versión -->
+            <a class="btn btn-link text-decoration-none" href="index.html?reset=1" title="Limpiar datos locales">
+              Forzar recarga
+            </a>
+          </div>
         </div>
       </div>
     </nav>
 
+    <!-- Hero -->
     <header class="bg-dark py-5">
       <div class="container px-4 px-lg-5 my-5">
         <div class="text-center text-white">
-          <h1 class="display-5 fw-bolder">Nombre</h1>
+          <h1 class="display-5 fw-bolder">Store FC</h1>
           <p class="lead fw-normal text-white-50 mb-0">De Europa a tu puerta, calidad garantizada</p>
         </div>
       </div>
     </header>
 
+    <!-- Filtros -->
     <section class="py-3 border-bottom bg-light">
       <div class="container px-4 px-lg-5">
         <form class="row g-2 align-items-end">
@@ -86,12 +98,14 @@
       </div>
     </section>
 
+    <!-- Grid de productos -->
     <section class="py-5">
       <div class="container px-4 px-lg-5 mt-3">
         <div id="productGrid" class="row gx-4 gx-lg-5 row-cols-2 row-cols-md-3 row-cols-xl-4 justify-content-center"></div>
       </div>
     </section>
 
+    <!-- Footer -->
     <footer class="py-5 bg-dark">
       <div class="container"><p class="m-0 text-center text-white">Copyright &copy; Store FC 2025</p></div>
     </footer>
@@ -155,7 +169,8 @@
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/scripts.js?v=20251009"></script>
 
     <!-- Atajo oculto: ir al panel admin con Ctrl+Alt+A / Cmd+Alt+A -->
