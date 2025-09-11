@@ -1,17 +1,19 @@
 // ==============================
-// scripts.js  (cabecera de Config)
+// scripts.js  (rápido con cache por versión + lazy images)
 // ==============================
 
-const LS_KEY_PRODUCTS = 'admin_products_override';
+const LS_KEY_PRODUCTS   = 'admin_products_override';      // override local del admin (preview)
+const PUBLIC_CACHE_KEY  = 'store_products_cache_v2';      // cache público por versión (rápido)
+const API_BASE          = 'https://script.google.com/macros/s/AKfycbwBMAN-2Ejo9-OIltCIWJzK9jiMKLEbug_KJlrpMFQ69xJIjvm5lXOTEi3j9rWWsbjreg/exec';
+const DATA_URL          = API_BASE + '?route=products';
+const VERSION_URL       = API_BASE + '?route=version';
+const WHATSAPP_PHONE    = '5493563491364';
+const SHEETS_ENDPOINT   = '';
 
-// === API en Apps Script ===
-// REEMPLAZÁ ESTO por tu NUEVA URL que termina en /exec:
-const API_BASE    = 'https://script.google.com/macros/s/AKfycbwBMAN-2Ejo9-OIltCIWJzK9jiMKLEbug_KJlrpMFQ69xJIjvm5lXOTEi3j9rWWsbjreg/exec';
-const DATA_URL    = API_BASE + '?route=products';
-const VERSION_URL = API_BASE + '?route=version';
-
-const WHATSAPP_PHONE  = '5493563491364';
-const SHEETS_ENDPOINT = '';
+// ====== Estado global ======
+let PRODUCTS = [];
+let CURRENT_VERSION = '0';
+let _refreshing = false;
 
 // ====== Helpers ======
 const $  = s => document.querySelector(s);
@@ -30,7 +32,6 @@ const updateCartBadge = () => {
 
 // Abrir WhatsApp sin duplicados
 function openWhatsApp(url) {
-  // abre una sola pestaña; si el navegador bloquea popups, hacemos fallback a location
   const win = window.open(url, '_blank', 'noopener,noreferrer');
   if (win && !win.closed) { try { win.opener = null; } catch(_) {} return; }
   window.location.assign(url);
@@ -55,71 +56,101 @@ function normalizeArray(raw) {
   }));
 }
 
-// ====== Fetch utils ======
+// ====== Fetch utils (dejamos cache del navegador/CDN trabajar) ======
 const fetchJSON = async (url) => {
-  const r = await fetch(url, { cache: 'no-store' }); // fuerza red a CDN
+  const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
   return r.json();
 };
 
-// ====== Catálogo (con versión + override) ======
-let PRODUCTS = [];
-let CURRENT_VERSION = '0';
+// ====== Carga + cacheo por versión (con soporte de override del admin) ======
+function readOverride(){
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
+    if (!raw) return null;
+    // Formatos posibles: {version, products:[...] } o un array suelto (legacy)
+    const version  = raw.version || '0';
+    const list     = Array.isArray(raw.products) ? raw.products : (Array.isArray(raw) ? raw : []);
+    return { version, products: normalizeArray(list) };
+  } catch { return null; }
+}
+
+function savePublicCache(version, products){
+  try {
+    localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify({ version, products }));
+  } catch(e){
+    // si excede cuota, cacheo solo la versión (lista vacía) para invalidar correctamente
+    try { localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify({ version, products: [] })); } catch(_){}
+  }
+}
+
+function pickDisplayList(baseList, baseVersion){
+  // Si hay override del admin y coincide la versión, lo usamos para previsualizar localmente
+  const ov = readOverride();
+  if (ov && ov.products?.length && String(ov.version||'0') === String(baseVersion||'0')) {
+    return ov.products.filter(p => p.enabled !== false);
+  }
+  return (baseList || []).filter(p => p.enabled !== false);
+}
 
 async function loadProducts() {
   if (PRODUCTS.length) return PRODUCTS;
 
-  // 1) traigo versión remota (si falla, uso '0')
+  // 0) Cache público rápido
   try {
-    const v = await fetchJSON(VERSION_URL);
-    CURRENT_VERSION = String(v.version || '0');
-  } catch(_) {
-    CURRENT_VERSION = '0';
-  }
-
-  // 2) pido JSON remoto rompiendo caché del CDN
-  let remoteProducts = [];
-  try {
-    const remote = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(CURRENT_VERSION)}`);
-    remoteProducts = normalizeArray(remote);
-  } catch (e) {
-    console.warn('No pude leer data/products.json:', e);
-  }
-
-  // 3) override local del admin
-  let override = null;
-  try {
-    override = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
-  } catch(_) { override = null; }
-
-  // admite formato { version, products: [...] } o bien un array suelto (legacy)
-  const overrideVersion = override && (override.version || '0');
-  const overrideList    = override && (Array.isArray(override.products) ? override.products : (Array.isArray(override) ? override : null));
-  const normOverride    = normalizeArray(overrideList || []);
-
-  // 4) decido fuente
-  const useOverride = normOverride.length > 0 && overrideVersion === CURRENT_VERSION;
-  PRODUCTS = (useOverride ? normOverride : remoteProducts).filter(p => p.enabled !== false);
-
-  // 5) si hay override pero de versión distinta, lo limpio
-  if (override && overrideVersion !== CURRENT_VERSION) {
-    localStorage.removeItem(LS_KEY_PRODUCTS);
-  }
-
-  // 6) si no hay nada, muestro error amigable
-  if (!PRODUCTS.length) {
-    const grid = $('#productGrid');
-    if (grid) {
-      grid.innerHTML = `
-        <div class="col-12">
-          <div class="alert alert-danger">
-            No pude cargar productos. Probá <a href="?reset=1" class="alert-link">forzar recarga</a>.
-          </div>
-        </div>`;
+    const cached = JSON.parse(localStorage.getItem(PUBLIC_CACHE_KEY) || 'null');
+    if (cached && (Array.isArray(cached.products) || cached.version)) {
+      CURRENT_VERSION = String(cached.version || '0');
+      PRODUCTS = pickDisplayList(cached.products || [], CURRENT_VERSION);
+      // refrescar en background (no bloquea primer render)
+      refreshFromServer().catch(console.warn);
+      return PRODUCTS;
     }
-  }
+  } catch(_) {}
 
+  // 1) Si no hay cache, ir directo al server
+  await refreshFromServer(true);
   return PRODUCTS;
+}
+
+async function refreshFromServer(force = false){
+  if (_refreshing) return;
+  _refreshing = true;
+  try {
+    // pedir versión remota
+    let remoteVersion = '0';
+    try {
+      const v = await fetchJSON(VERSION_URL);
+      remoteVersion = String(v.version || '0');
+    } catch(_) {}
+
+    if (!force && remoteVersion === CURRENT_VERSION && PRODUCTS.length) return;
+
+    // traer productos remotos (rompemos cache CDN con ?v=version)
+    const remoteRaw = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(remoteVersion)}`);
+    const remoteList = normalizeArray(remoteRaw);
+
+    // guardar cache público (siempre el remoto canónico)
+    savePublicCache(remoteVersion, remoteList);
+
+    // elegir qué mostrar (override si coincide versión, si no remoto)
+    CURRENT_VERSION = remoteVersion;
+    PRODUCTS = pickDisplayList(remoteList, CURRENT_VERSION);
+
+    // volver a dibujar si ya hay UI
+    rerender();
+  } catch (e) {
+    console.warn('refreshFromServer error', e);
+  } finally {
+    _refreshing = false;
+  }
+}
+
+function rerender(){
+  const page = document.body.dataset.page || '';
+  if (page === 'index')   renderIndex();
+  if (page === 'product') renderProduct();
+  if (page === 'cart')    renderCart();
 }
 
 const findProduct = id => PRODUCTS.find(p => p.id === id);
@@ -142,6 +173,23 @@ function availableFor(p, size, excludeIndex = null){
   const pid  = p?.id;
   const reserved = reservedQty(pid, size, excludeIndex);
   return Math.max(0, base - reserved);
+}
+
+// ====== Lazy images ======
+function setupLazyImages(rootEl){
+  const imgs = (rootEl || document).querySelectorAll('img[data-src]');
+  if (!imgs.length) return;
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(en=>{
+      if (en.isIntersecting) {
+        const img = en.target;
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+        io.unobserve(img);
+      }
+    });
+  }, { rootMargin: '200px' });
+  imgs.forEach(img => io.observe(img));
 }
 
 // ====== Home (grid + filtros) ======
@@ -180,7 +228,10 @@ async function renderIndex(){
         ${p.retro ? `<div class="badge bg-dark text-white position-absolute" style="top:.5rem;right:.5rem">Retro</div>` : ''}
         <a class="text-decoration-none" href="product.html?id=${encodeURIComponent(p.id)}">
           <img class="card-img-top"
-               src="${img0}" alt="${title}"
+               loading="lazy"
+               data-src="${img0}"
+               src="assets/img/placeholder.jpg"
+               alt="${title}"
                onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">
         </a>
         <div class="card-body p-4">
@@ -198,6 +249,8 @@ async function renderIndex(){
       </div>
     </div>`;
   }).join('');
+
+  setupLazyImages(grid);
 }
 
 function bindIndexFilters(){
@@ -239,7 +292,8 @@ async function renderProduct(){
              onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">
         <div class="d-flex flex-wrap gap-2">
           ${(p.images||[]).map((src,i)=>`<img class="rounded border" style="width:82px;height:82px;object-fit:cover;cursor:pointer"
-             data-src="${src}" src="${src}" alt="${(p.name||'Producto')} ${i+1}"
+             loading="lazy" data-src="${src}" src="assets/img/placeholder.jpg"
+             alt="${(p.name||'Producto')} ${i+1}"
              onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">`).join('')}
         </div>
       </div>
@@ -270,9 +324,13 @@ async function renderProduct(){
     </div>
   `;
 
+  // lazy thumbs
+  setupLazyImages(view);
+
   // thumbs -> main
   $$('#productView [data-src]').forEach(t => t.addEventListener('click', e => {
-    $('#mainImg').src = e.currentTarget.dataset.src;
+    const src = e.currentTarget.dataset.src || e.currentTarget.src;
+    $('#mainImg').src = src;
   }));
 
   // add to cart (valida stock efectivo)
@@ -309,7 +367,7 @@ function addToCart(productId, size, qty=1){
 
   const idx = cart.findIndex(i => i.productId===productId && i.size===size);
   if (idx>=0){
-    const newQty = Math.min(cart[idx].qty + qty, availableFor(p, size, idx));
+    const newQty = Math.min((cart[idx].qty||0) + qty, availableFor(p, size, idx));
     cart[idx].qty = newQty;
   } else {
     const pushQty = Math.min(qty, avail);
@@ -512,9 +570,10 @@ function bindQuickOrderForm(){
 
 // ====== Init ======
 document.addEventListener('DOMContentLoaded', async () => {
-  // Atajo de emergencia: ?reset=1 limpia override local
+  // Atajo de emergencia: ?reset=1 limpia override local y cache público
   if (new URLSearchParams(location.search).has('reset')) {
     localStorage.removeItem(LS_KEY_PRODUCTS);
+    localStorage.removeItem(PUBLIC_CACHE_KEY);
   }
 
   updateCartBadge();

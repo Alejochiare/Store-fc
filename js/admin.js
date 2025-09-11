@@ -3,8 +3,7 @@ const LS_KEY_PRODUCTS = 'admin_products_override';
 const ADMIN_PASSWORD  = '9/12';
 
 // === API en Apps Script ===
-// REEMPLAZÁ ESTO por tu NUEVA URL que termina en /exec:
-const API_BASE    = 'https://script.google.com/macros/s/AKfycbwBMAN-2Ejo9-OIltCIWJzK9jiMKLEbug_KJlrpMFQ69xJIjvm5lXOTEi3j9rWWsbjreg/exec';
+const API_BASE    = 'https://script.google.com/macros/s/AKfycbxczfKfCYqXrZxmSoplqt77Srthibomj6exTfoM7jBBrBCfyRtFXHnSWtCfYfc-8mSdQw/exec';
 const DATA_URL    = API_BASE + '?route=products';
 const VERSION_URL = API_BASE + '?route=version';
 
@@ -18,6 +17,88 @@ let CREATING = false; // evita doble submit en "Agregar remera"
 // ====== Utils ======
 const $ = s => document.querySelector(s);
 
+// ---------- IndexedDB fallback (para data grande) ----------
+const IDB_DB = 'storeAdminV1';
+const IDB_STORE = 'kv';
+const IDB_FLAG = LS_KEY_PRODUCTS + '_idb';
+let DATA_CACHE = { version:'0', products: [] }; // estado en memoria (sync)
+
+function idbOpen(){
+  return new Promise((res, rej)=>{
+    const req = indexedDB.open(IDB_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbSet(key, value){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = ()=>res();
+    tx.onerror = ()=>rej(tx.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE,'readonly');
+    const rq = tx.objectStore(IDB_STORE).get(key);
+    rq.onsuccess = ()=>res(rq.result || null);
+    rq.onerror = ()=>rej(rq.error);
+  });
+}
+async function idbDel(key){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{
+    const tx = db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = ()=>res();
+    tx.onerror = ()=>rej(tx.error);
+  });
+}
+
+// Carga inicial desde IDB o localStorage al cache en memoria (sync para el resto del código)
+async function storageLoad(){
+  let data = null;
+  try{
+    if (localStorage.getItem(IDB_FLAG) === '1') {
+      data = await idbGet('override');
+    }
+    if (!data) {
+      const raw = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
+      if (raw && Array.isArray(raw.products)) data = raw;
+      else if (raw && Array.isArray(raw)) data = { version: REMOTE_VERSION, products: raw };
+    }
+  }catch{}
+  DATA_CACHE = data || { version: REMOTE_VERSION, products: [] };
+  return DATA_CACHE;
+}
+
+// Guarda al cache + intenta localStorage; si explota la cuota, guarda en IDB
+async function saveData(obj){
+  const version  = obj.version || REMOTE_VERSION || '0';
+  const products = Array.isArray(obj.products) ? obj.products
+                   : (Array.isArray(obj) ? obj : []);
+  DATA_CACHE = { version, products };
+
+  try{
+    localStorage.setItem(LS_KEY_PRODUCTS, JSON.stringify(DATA_CACHE));
+    localStorage.removeItem(IDB_FLAG);
+    // opcional: borrar copia vieja en IDB para liberar
+    try{ await idbDel('override'); }catch{}
+  }catch(e){
+    // QuotaExceeded -> guardo en IDB y dejo un "puntero" mínimo en LS
+    await idbSet('override', DATA_CACHE);
+    localStorage.setItem(IDB_FLAG, '1');
+    try{ localStorage.setItem(LS_KEY_PRODUCTS, JSON.stringify({ version, products: [] })); }catch{}
+  }
+}
+
+function getData(){ return DATA_CACHE; }
+
+// ---------- fetch/json helpers ----------
 async function fetchJSON(url){
   const r = await fetch(url, { cache:'no-store' });
   if(!r.ok) throw new Error('HTTP '+r.status+' en '+url);
@@ -41,32 +122,17 @@ async function loadBaseData(){
   }
 }
 
-function saveData(obj){
-  const version  = obj.version || REMOTE_VERSION || '0';
-  const products = Array.isArray(obj.products) ? obj.products
-                   : (Array.isArray(obj) ? obj : []);
-  localStorage.setItem(LS_KEY_PRODUCTS, JSON.stringify({ version, products }));
-}
-
-function getData(){
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
-    if (raw && Array.isArray(raw.products)) return raw;
-    if (raw && Array.isArray(raw)) return { version: REMOTE_VERSION, products: raw };
-  } catch {}
-  return { version: REMOTE_VERSION, products: [] };
-}
-
+// Normaliza IDs: minúsculas, sin tildes, solo [a-z0-9-]
 function slugId(s){
   return String(s||'')
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-z0-9]+/g,'-')
-    .replace(/^-+|-+$/g,'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // saca tildes
+    .replace(/[^a-z0-9]+/g,'-')                      // raro -> guion
+    .replace(/^-+|-+$/g,'')                          // guiones borde
     .slice(0, 80);
 }
 
-// --- imágenes ---
+// --- imágenes: leer y redimensionar a dataURL (WebP, más chico) ---
 function readFileAsImage(file){
   return new Promise((resolve, reject)=>{
     const fr = new FileReader();
@@ -75,15 +141,16 @@ function readFileAsImage(file){
     fr.readAsDataURL(file);
   });
 }
-async function resizeToDataURL(file, maxW=1200, maxH=1200, quality=0.85){
+async function resizeToDataURL(file, maxW=1000, maxH=1000, quality=0.75){
   const img = await readFileAsImage(file);
   const ratio = Math.min(maxW/img.width, maxH/img.height, 1);
   const w = Math.round(img.width*ratio), h = Math.round(img.height*ratio);
   const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL('image/jpeg', quality);
+  try { return canvas.toDataURL('image/webp', quality); }
+  catch { return canvas.toDataURL('image/jpeg', quality); }
 }
-async function filesToDataUrls(fileList, max=8){
+async function filesToDataUrls(fileList, max=6){
   const files = [...(fileList||[])].slice(0, max);
   const out = [];
   for (const f of files){
@@ -117,18 +184,22 @@ $('#btnLogin').addEventListener('click', async ()=>{
 
   REMOTE_VERSION = await getRemoteVersion();
 
-  if (!localStorage.getItem(LS_KEY_PRODUCTS)) {
+  // cargar override desde storage (IDB/LS)
+  await storageLoad();
+
+  // si no hay override, traigo base online para editar
+  if (!getData().products.length) {
     const base = await loadBaseData();
-    saveData(base);
+    await saveData(base);
   }
 
   $('#loginBox').classList.add('d-none');
   $('#adminUI').classList.remove('d-none');
 
+  // Preview de imágenes al seleccionar en el alta
   $('#fileImages')?.addEventListener('change', async (ev)=>{
     const urls = await filesToDataUrls(ev.target.files, 8);
-    const wrap = $('#filePreview');
-    wrap.innerHTML = urls.map(u=>`<img class="img-thumb me-1 mb-1" src="${u}">`).join('');
+    $('#filePreview').innerHTML = urls.map(u=>`<img class="img-thumb me-1 mb-1" src="${u}">`).join('');
   });
 
   render();
@@ -137,22 +208,22 @@ $('#btnLogin').addEventListener('click', async ()=>{
 $('#btnReload').addEventListener('click', async ()=>{
   REMOTE_VERSION = await getRemoteVersion();
   const base = await loadBaseData();
-  saveData(base);
+  await saveData(base);
   render();
 });
 
 // ====== Export / Import / Clear ======
 $('#btnExport').addEventListener('click', ()=>{
   const data = getData();
+  // 1) products.json
   const blob1 = new Blob([JSON.stringify({ products: data.products }, null, 2)], {type:'application/json'});
   const a1 = document.createElement('a'); a1.href = URL.createObjectURL(blob1); a1.download = 'products.json'; a1.click();
   URL.revokeObjectURL(a1.href);
-
+  // 2) version.json (timestamp nuevo)
   const newVersion = new Date().toISOString().replace(/[:.]/g,'-');
   const blob2 = new Blob([JSON.stringify({ version: newVersion }, null, 2)], {type:'application/json'});
   const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob2); a2.download = 'version.json'; a2.click();
   URL.revokeObjectURL(a2.href);
-
   alert('Descargados products.json y version.json.\nSumalos al repo si querés backup.');
 });
 
@@ -161,7 +232,7 @@ $('#fileImport').addEventListener('change', async (ev)=>{
   try{
     const obj = JSON.parse(await file.text());
     const list = Array.isArray(obj.products) ? obj.products : (Array.isArray(obj) ? obj : []);
-    saveData({ version: REMOTE_VERSION, products: normalizeArray(list) });
+    await saveData({ version: REMOTE_VERSION, products: normalizeArray(list) });
     render();
     alert('Importado ✔');
   }catch(e){ alert('No se pudo importar: ' + e.message); }
@@ -171,13 +242,15 @@ $('#fileImport').addEventListener('change', async (ev)=>{
 $('#btnClear').addEventListener('click', async ()=>{
   if(!confirm('¿Borrar override y volver a lo online?')) return;
   localStorage.removeItem(LS_KEY_PRODUCTS);
+  localStorage.removeItem(IDB_FLAG);
+  try{ await idbDel('override'); }catch{}
   const base = await loadBaseData();
-  saveData(base);
+  await saveData(base);
   render(true);
   alert('Listo ✔');
 });
 
-// ====== Alta ======
+// ====== Alta (único handler) ======
 $('#formCreate').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   if (CREATING) return;
@@ -190,12 +263,16 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
 
   try {
     const f = new FormData(form);
+
+    // imágenes locales (múltiples)
     const imgs = await filesToDataUrls($('#fileImages').files, 8);
     if (imgs.length === 0) throw new Error('Subí al menos una foto');
 
+    // ID slug (desde el campo o desde el nombre)
     let id = slugId(f.get('id') || f.get('name'));
     if (!id) throw new Error('Poné un ID o un Nombre');
 
+    // refresco el estado justo antes de chequear duplicado
     const data = getData();
     if (data.products.find(p => slugId(p.id) === id)) {
       throw new Error(`El ID ya existe: ${id}`);
@@ -220,8 +297,9 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
 
     const next = getData();
     next.products.push(prod);
-    saveData({ version: REMOTE_VERSION, products: next.products });
+    await saveData({ version: REMOTE_VERSION, products: next.products });
 
+    // limpieza + refresh UI
     form.reset();
     $('#filePreview').innerHTML = '';
     render();
@@ -235,7 +313,7 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
   }
 });
 
-// ====== Render tabla ======
+// ====== Render tabla (gestión de fotos locales) ======
 function render(skipCount){
   const data = getData();
   if(!skipCount) $('#count').textContent = data.products.length;
@@ -290,14 +368,16 @@ function render(skipCount){
       </td>
     `;
 
+    // eliminar una foto
     tr.querySelectorAll('[data-delimg]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
+      btn.addEventListener('click', async ()=>{
         const d = getData();
         d.products[idx].images.splice(+btn.dataset.delimg,1);
-        saveData(d); render();
+        await saveData(d); render();
       });
     });
 
+    // agregar fotos (append)
     tr.querySelector('[data-act="add"]').addEventListener('click', ()=>{
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.hidden = true;
@@ -306,11 +386,12 @@ function render(skipCount){
         const arr = await filesToDataUrls(input.files, 8);
         const d = getData();
         d.products[idx].images = [...(d.products[idx].images||[]), ...arr];
-        saveData(d); render(); input.remove();
+        await saveData(d); render(); input.remove();
       }, { once:true });
       input.click();
     });
 
+    // reemplazar fotos (set)
     tr.querySelector('[data-act="replace"]').addEventListener('click', ()=>{
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.hidden = true;
@@ -318,12 +399,13 @@ function render(skipCount){
       input.addEventListener('change', async ()=>{
         const arr = await filesToDataUrls(input.files, 8);
         if (!arr.length) return;
-        const d = getData(); d.products[idx].images = arr; saveData(d); render(); input.remove();
+        const d = getData(); d.products[idx].images = arr; await saveData(d); render(); input.remove();
       }, { once:true });
       input.click();
     });
 
-    tr.querySelector('[data-act="save"]').addEventListener('click', ()=>{
+    // guardar fila
+    tr.querySelector('[data-act="save"]').addEventListener('click', async ()=>{
       const d = getData();
       const row = d.products[idx];
       row.name     = tr.querySelector('[data-k="name"]').value.trim();
@@ -340,12 +422,13 @@ function render(skipCount){
         XL:+tr.querySelector('[data-size="XL"]').value||0,
         XXL:+tr.querySelector('[data-size="XXL"]').value||0,
       };
-      saveData(d); alert('Guardado ✔');
+      await saveData(d); alert('Guardado ✔');
     });
 
-    tr.querySelector('[data-act="delete"]').addEventListener('click', ()=>{
+    // borrar producto
+    tr.querySelector('[data-act="delete"]').addEventListener('click', async ()=>{
       if(!confirm(`Eliminar "${p.name}" del override?`)) return;
-      const d = getData(); d.products.splice(idx,1); saveData(d); tr.remove();
+      const d = getData(); d.products.splice(idx,1); await saveData(d); tr.remove();
       $('#count').textContent = d.products.length;
     });
 
@@ -358,7 +441,7 @@ async function publishNow(){
   const btn = $('#btnPublish');
   btn?.setAttribute('disabled','');
   try {
-    const data = getData();
+    const data = getData(); // { version, products }
     const fd = new FormData();
     fd.append('payload', JSON.stringify({ products: data.products }));
 
@@ -371,7 +454,7 @@ async function publishNow(){
       throw new Error(j.error || 'Error publicando');
     }
     REMOTE_VERSION = j.version;
-    saveData({ version: REMOTE_VERSION, products: data.products });
+    await saveData({ version: REMOTE_VERSION, products: data.products });
     alert('Publicado ✔ – versión: ' + j.version);
   } catch (e) {
     alert('No se pudo publicar: ' + (e.message || e));
