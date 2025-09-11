@@ -3,7 +3,8 @@ const LS_KEY_PRODUCTS = 'admin_products_override';
 const ADMIN_PASSWORD  = '9/12';
 
 // === API en Apps Script ===
-const API_BASE    = 'https://script.google.com/macros/s/AKfycbwcaGIX10Ehl_CA36eyMtTLbeGOtgS6KP8C6w22BBrtf_4c5TFws1QK8ZEy4rzuXwvDlA/exec';
+// REEMPLAZÁ ESTO por tu NUEVA URL que termina en /exec:
+const API_BASE    = 'https://script.google.com/macros/s/AKfycbwBMAN-2Ejo9-OIltCIWJzK9jiMKLEbug_KJlrpMFQ69xJIjvm5lXOTEi3j9rWWsbjreg/exec';
 const DATA_URL    = API_BASE + '?route=products';
 const VERSION_URL = API_BASE + '?route=version';
 
@@ -41,7 +42,6 @@ async function loadBaseData(){
 }
 
 function saveData(obj){
-  // siempre persistimos { version, products }
   const version  = obj.version || REMOTE_VERSION || '0';
   const products = Array.isArray(obj.products) ? obj.products
                    : (Array.isArray(obj) ? obj : []);
@@ -57,17 +57,16 @@ function getData(){
   return { version: REMOTE_VERSION, products: [] };
 }
 
-// Normaliza IDs: minúsculas, sin tildes, solo [a-z0-9-]
 function slugId(s){
   return String(s||'')
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // saca tildes
-    .replace(/[^a-z0-9]+/g,'-')                      // raro -> guion
-    .replace(/^-+|-+$/g,'')                          // guiones borde
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-')
+    .replace(/^-+|-+$/g,'')
     .slice(0, 80);
 }
 
-// --- imágenes: leer y redimensionar a dataURL ---
+// --- imágenes ---
 function readFileAsImage(file){
   return new Promise((resolve, reject)=>{
     const fr = new FileReader();
@@ -116,10 +115,8 @@ $('#btnLogin').addEventListener('click', async ()=>{
   const p = $('#adminPass').value.trim();
   if (p !== ADMIN_PASSWORD) { alert('Contraseña incorrecta'); return; }
 
-  // Traigo versión remota para previsualizar con la misma versión
   REMOTE_VERSION = await getRemoteVersion();
 
-  // Si no hay override, precargo con lo del repo para editar
   if (!localStorage.getItem(LS_KEY_PRODUCTS)) {
     const base = await loadBaseData();
     saveData(base);
@@ -128,7 +125,6 @@ $('#btnLogin').addEventListener('click', async ()=>{
   $('#loginBox').classList.add('d-none');
   $('#adminUI').classList.remove('d-none');
 
-  // Preview de imágenes al seleccionar en el alta
   $('#fileImages')?.addEventListener('change', async (ev)=>{
     const urls = await filesToDataUrls(ev.target.files, 8);
     const wrap = $('#filePreview');
@@ -148,27 +144,24 @@ $('#btnReload').addEventListener('click', async ()=>{
 // ====== Export / Import / Clear ======
 $('#btnExport').addEventListener('click', ()=>{
   const data = getData();
-  // 1) products.json
   const blob1 = new Blob([JSON.stringify({ products: data.products }, null, 2)], {type:'application/json'});
   const a1 = document.createElement('a'); a1.href = URL.createObjectURL(blob1); a1.download = 'products.json'; a1.click();
   URL.revokeObjectURL(a1.href);
 
-  // 2) version.json (timestamp nuevo)
   const newVersion = new Date().toISOString().replace(/[:.]/g,'-');
   const blob2 = new Blob([JSON.stringify({ version: newVersion }, null, 2)], {type:'application/json'});
   const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob2); a2.download = 'version.json'; a2.click();
   URL.revokeObjectURL(a2.href);
 
-  alert('Descargados products.json y version.json.\nSubilos a /data del repo y hacé commit.');
+  alert('Descargados products.json y version.json.\nSumalos al repo si querés backup.');
 });
 
 $('#fileImport').addEventListener('change', async (ev)=>{
   const file = ev.target.files[0]; if(!file) return;
   try{
     const obj = JSON.parse(await file.text());
-    const normalized = Array.isArray(obj.products) ? { products: normalizeArray(obj) } : { products: normalizeArray(obj) };
-    // guardo con la versión remota para previsualizar inmediatamente
-    saveData({ version: REMOTE_VERSION, products: normalized.products });
+    const list = Array.isArray(obj.products) ? obj.products : (Array.isArray(obj) ? obj : []);
+    saveData({ version: REMOTE_VERSION, products: normalizeArray(list) });
     render();
     alert('Importado ✔');
   }catch(e){ alert('No se pudo importar: ' + e.message); }
@@ -176,16 +169,15 @@ $('#fileImport').addEventListener('change', async (ev)=>{
 });
 
 $('#btnClear').addEventListener('click', async ()=>{
-  if(!confirm('¿Borrar override y volver al products.json del repo?')) return;
+  if(!confirm('¿Borrar override y volver a lo online?')) return;
   localStorage.removeItem(LS_KEY_PRODUCTS);
-  // Repongo con base remota para que la tabla no quede vacía
   const base = await loadBaseData();
   saveData(base);
   render(true);
   alert('Listo ✔');
 });
 
-// ====== Alta (único handler) ======
+// ====== Alta ======
 $('#formCreate').addEventListener('submit', async (ev)=>{
   ev.preventDefault();
   if (CREATING) return;
@@ -198,16 +190,12 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
 
   try {
     const f = new FormData(form);
-
-    // imágenes locales (múltiples)
     const imgs = await filesToDataUrls($('#fileImages').files, 8);
     if (imgs.length === 0) throw new Error('Subí al menos una foto');
 
-    // ID slug (desde el campo o desde el nombre)
     let id = slugId(f.get('id') || f.get('name'));
     if (!id) throw new Error('Poné un ID o un Nombre');
 
-    // refresco el estado justo antes de chequear duplicado
     const data = getData();
     if (data.products.find(p => slugId(p.id) === id)) {
       throw new Error(`El ID ya existe: ${id}`);
@@ -232,10 +220,8 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
 
     const next = getData();
     next.products.push(prod);
-    // guardo con versión remota para que el front (scripts.js) lo tome como válido
     saveData({ version: REMOTE_VERSION, products: next.products });
 
-    // limpieza + refresh UI
     form.reset();
     $('#filePreview').innerHTML = '';
     render();
@@ -249,7 +235,7 @@ $('#formCreate').addEventListener('submit', async (ev)=>{
   }
 });
 
-// ====== Render tabla (gestión de fotos locales) ======
+// ====== Render tabla ======
 function render(skipCount){
   const data = getData();
   if(!skipCount) $('#count').textContent = data.products.length;
@@ -304,7 +290,6 @@ function render(skipCount){
       </td>
     `;
 
-    // eliminar una foto
     tr.querySelectorAll('[data-delimg]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const d = getData();
@@ -313,7 +298,6 @@ function render(skipCount){
       });
     });
 
-    // agregar fotos (append)
     tr.querySelector('[data-act="add"]').addEventListener('click', ()=>{
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.hidden = true;
@@ -327,7 +311,6 @@ function render(skipCount){
       input.click();
     });
 
-    // reemplazar fotos (set)
     tr.querySelector('[data-act="replace"]').addEventListener('click', ()=>{
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.multiple = true; input.hidden = true;
@@ -340,7 +323,6 @@ function render(skipCount){
       input.click();
     });
 
-    // guardar fila
     tr.querySelector('[data-act="save"]').addEventListener('click', ()=>{
       const d = getData();
       const row = d.products[idx];
@@ -361,7 +343,6 @@ function render(skipCount){
       saveData(d); alert('Guardado ✔');
     });
 
-    // borrar producto
     tr.querySelector('[data-act="delete"]').addEventListener('click', ()=>{
       if(!confirm(`Eliminar "${p.name}" del override?`)) return;
       const d = getData(); d.products.splice(idx,1); saveData(d); tr.remove();
@@ -370,26 +351,32 @@ function render(skipCount){
 
     $('#tbody').appendChild(tr);
   });
-  // ====== Publicar en servidor (Apps Script) ======
-$('#btnPublish')?.addEventListener('click', async ()=>{
-  try {
-    const data = getData(); // { version, products }
+}
 
-    // Enviar como FormData para evitar preflight/CORS
+// ====== Publicar en servidor (Apps Script) ======
+async function publishNow(){
+  const btn = $('#btnPublish');
+  btn?.setAttribute('disabled','');
+  try {
+    const data = getData();
     const fd = new FormData();
     fd.append('payload', JSON.stringify({ products: data.products }));
 
     const resp = await fetch(PUBLISH_URL, { method:'POST', body: fd });
-    const j = await resp.json();
-    if (!j.ok) throw new Error(j.error || 'Error publicando');
-
-    // Actualizo versión local para que el preview coincida con server
+    const text = await resp.text();
+    let j = {};
+    try { j = JSON.parse(text); } catch(_){ throw new Error('respuesta inválida: ' + text.slice(0,120)); }
+    if (!j.ok) {
+      if ((j.error||'').includes('forbidden')) throw new Error('forbidden (la clave del admin NO coincide con la de Code.gs)');
+      throw new Error(j.error || 'Error publicando');
+    }
     REMOTE_VERSION = j.version;
     saveData({ version: REMOTE_VERSION, products: data.products });
     alert('Publicado ✔ – versión: ' + j.version);
   } catch (e) {
     alert('No se pudo publicar: ' + (e.message || e));
+  } finally {
+    btn?.removeAttribute('disabled');
   }
-});
-
 }
+$('#btnPublish')?.addEventListener('click', publishNow);
