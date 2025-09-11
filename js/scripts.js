@@ -1,8 +1,16 @@
-// ====== Config ======
-const LS_KEY_PRODUCTS = 'admin_products_override'; // donde guarda el panel admin
-const DATA_URL_FALLBACK = 'data/products.json';    // JSON del repo
-const WHATSAPP_PHONE = '5493563491364';            // 549 + area sin 0 + número sin 15
-const SHEETS_ENDPOINT = '';                         // opcional: Apps Script para loguear ventas
+// ====== Config (cache-bust central) ======
+const SITE_VERSION = '20250911-02'; // <-- SUBILO en cada push (02, 03, 04...)
+const DATA_URL = `data/products.json?v=${encodeURIComponent(SITE_VERSION)}`;
+const WHATSAPP_PHONE = '5493563491364';
+const SHEETS_ENDPOINT = ''; // opcional
+
+// ====== Carga de productos (SIEMPRE del JSON del repo) ======
+async function loadProductsData() {
+  const res = await fetch(DATA_URL, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`No se pudo leer ${DATA_URL} (${res.status})`);
+  return await res.json(); // { products: [...] }
+}
+
 
 // ====== Helpers ======
 const $  = s => document.querySelector(s);
