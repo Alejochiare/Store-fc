@@ -1,9 +1,9 @@
 // ==============================
-// scripts.js  (turbo: caché por versión + caché por producto + lazy images + debounce)
+// scripts.js  (rápido + listo para Service Worker)
 // ==============================
 
 const LS_KEY_PRODUCTS   = 'admin_products_override';      // override local del admin (preview)
-const PUBLIC_CACHE_KEY  = 'store_products_cache_v2';      // cache público por versión (rápido)
+const PUBLIC_CACHE_KEY  = 'store_products_cache_v3';      // cache público por versión (rápido)
 const API_BASE          = 'https://script.google.com/macros/s/AKfycbwBMAN-2Ejo9-OIltCIWJzK9jiMKLEbug_KJlrpMFQ69xJIjvm5lXOTEi3j9rWWsbjreg/exec';
 const DATA_URL          = API_BASE + '?route=products';
 const VERSION_URL       = API_BASE + '?route=version';
@@ -66,12 +66,12 @@ function rebuildIndex(list){
   (list||[]).forEach(p => { if (p?.id) _byId[p.id] = p; });
 }
 
-// ====== Fetch utils rápidos ======
-const fetchJSON = async (url, {timeout=6000}={}) => {
+// ====== Fetch utils (deja que el Service Worker maneje la caché) ======
+const fetchJSON = async (url, {timeout=7000}={}) => {
   const ctrl = new AbortController();
   const t = setTimeout(()=>ctrl.abort(), timeout);
   try{
-    const r = await fetch(url, {signal: ctrl.signal, cache:'force-cache', priority:'high'});
+    const r = await fetch(url, { signal: ctrl.signal }); // sin cache explicita
     if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
     return r.json();
   } finally { clearTimeout(t); }
@@ -139,7 +139,7 @@ async function refreshFromServer(force = false){
 
     if (!force && remoteVersion === CURRENT_VERSION && PRODUCTS.length) return;
 
-    // traer productos remotos (rompemos cache CDN con ?v=version)
+    // traer productos remotos (rompemos cache con ?v=version — clave para SW)
     const remoteRaw = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(remoteVersion)}`, {timeout:7000});
     const remoteList = normalizeArray(remoteRaw);
 
@@ -453,17 +453,22 @@ async function renderCart(){
 
   if (!cart.length){
     wrap.innerHTML = `<p class="text-muted">Tu carrito está vacío.</p>`;
-    $('#cartTotal') && ($('#cartTotal').textContent = money(0));
+    if ($('#cartTotal')) $('#cartTotal').textContent = money(0);
     return;
   }
 
   wrap.innerHTML = `
     <div class="table-responsive">
       <table class="table align-middle">
-        <thead><tr>
-          <th>Producto</th><th class="text-center">Talle</th>
-          <th style="width:130px;">Cantidad</th><th>Subtotal</th><th></th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th class="text-center">Talle</th>
+            <th style="width:130px;">Cantidad</th>
+            <th>Subtotal</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody>
           ${cart.map((i,idx)=> {
             const p = _byId[i.productId] || {};
@@ -476,7 +481,8 @@ async function renderCart(){
                 <td class="text-center">${i.size}</td>
                 <td>
                   <input type="number" min="1" max="${Math.max(1,max)}"
-                         class="form-control form-control-sm qty" data-idx="${idx}" value="${i.qty||1}">
+                         class="form-control form-control-sm qty"
+                         data-idx="${idx}" value="${i.qty||1}">
                   <div class="form-text">Disp.: ${max}</div>
                 </td>
                 <td>${money((price||0)*(i.qty||0))}</td>
@@ -503,7 +509,7 @@ async function renderCart(){
     removeFromCart(+e.currentTarget.dataset.idx);
   }));
 
-  $('#cartTotal') && ($('#cartTotal').textContent = money(cartTotal()));
+  if ($('#cartTotal')) $('#cartTotal').textContent = money(cartTotal());
 }
 
 // ====== Checkout (WhatsApp + opcional Sheets) ======
@@ -624,6 +630,11 @@ function bindQuickOrderForm(){
 
 // ====== Init ======
 document.addEventListener('DOMContentLoaded', async () => {
+  // Registrar Service Worker (para cache de JSON/imágenes y SWR)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(console.error);
+  }
+
   // Atajo de emergencia: ?reset=1 limpia override local y cache público
   if (new URLSearchParams(location.search).has('reset')) {
     localStorage.removeItem(LS_KEY_PRODUCTS);
@@ -640,7 +651,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   bindQuickOrderForm(); // modal "Hacé tu pedido"
 
-  // Optimización global: imágenes existentes -> async decode
+  // Optimización global: imágenes existentes -> async decode + lazy por default
   document.querySelectorAll('img').forEach(img=>{
     if(!img.closest('.product-hero')) img.loading = img.loading || 'lazy';
     img.decoding = 'async';
