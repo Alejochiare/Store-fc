@@ -1,5 +1,5 @@
 // ==============================
-// scripts.js  (rápido con cache por versión + lazy images)
+// scripts.js  (turbo: caché por versión + caché por producto + lazy images + debounce)
 // ==============================
 
 const LS_KEY_PRODUCTS   = 'admin_products_override';      // override local del admin (preview)
@@ -14,6 +14,7 @@ const SHEETS_ENDPOINT   = '';
 let PRODUCTS = [];
 let CURRENT_VERSION = '0';
 let _refreshing = false;
+let _byId = Object.create(null); // índice por id para resoluciones instantáneas
 
 // ====== Helpers ======
 const $  = s => document.querySelector(s);
@@ -28,6 +29,11 @@ const updateCartBadge = () => {
   const c = getCart();
   const el = $('#cartCount');
   if (el) el.textContent = c.reduce((a,i)=>a + (i.qty||0), 0);
+};
+
+// Debounce para no rerender en cada tecla
+const debounce = (fn, ms=200) => {
+  let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
 };
 
 // Abrir WhatsApp sin duplicados
@@ -55,12 +61,20 @@ function normalizeArray(raw) {
     enabled  : p.enabled !== false
   }));
 }
+function rebuildIndex(list){
+  _byId = Object.create(null);
+  (list||[]).forEach(p => { if (p?.id) _byId[p.id] = p; });
+}
 
-// ====== Fetch utils (dejamos cache del navegador/CDN trabajar) ======
-const fetchJSON = async (url) => {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
-  return r.json();
+// ====== Fetch utils rápidos ======
+const fetchJSON = async (url, {timeout=6000}={}) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), timeout);
+  try{
+    const r = await fetch(url, {signal: ctrl.signal, cache:'force-cache', priority:'high'});
+    if (!r.ok) throw new Error(`HTTP ${r.status} en ${url}`);
+    return r.json();
+  } finally { clearTimeout(t); }
 };
 
 // ====== Carga + cacheo por versión (con soporte de override del admin) ======
@@ -68,10 +82,10 @@ function readOverride(){
   try {
     const raw = JSON.parse(localStorage.getItem(LS_KEY_PRODUCTS) || 'null');
     if (!raw) return null;
-    // Formatos posibles: {version, products:[...] } o un array suelto (legacy)
     const version  = raw.version || '0';
     const list     = Array.isArray(raw.products) ? raw.products : (Array.isArray(raw) ? raw : []);
-    return { version, products: normalizeArray(list) };
+    const norm     = normalizeArray(list);
+    return { version, products: norm };
   } catch { return null; }
 }
 
@@ -79,13 +93,11 @@ function savePublicCache(version, products){
   try {
     localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify({ version, products }));
   } catch(e){
-    // si excede cuota, cacheo solo la versión (lista vacía) para invalidar correctamente
     try { localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify({ version, products: [] })); } catch(_){}
   }
 }
 
 function pickDisplayList(baseList, baseVersion){
-  // Si hay override del admin y coincide la versión, lo usamos para previsualizar localmente
   const ov = readOverride();
   if (ov && ov.products?.length && String(ov.version||'0') === String(baseVersion||'0')) {
     return ov.products.filter(p => p.enabled !== false);
@@ -96,19 +108,20 @@ function pickDisplayList(baseList, baseVersion){
 async function loadProducts() {
   if (PRODUCTS.length) return PRODUCTS;
 
-  // 0) Cache público rápido
+  // 0) Cache público inmediato
   try {
     const cached = JSON.parse(localStorage.getItem(PUBLIC_CACHE_KEY) || 'null');
     if (cached && (Array.isArray(cached.products) || cached.version)) {
       CURRENT_VERSION = String(cached.version || '0');
       PRODUCTS = pickDisplayList(cached.products || [], CURRENT_VERSION);
-      // refrescar en background (no bloquea primer render)
-      refreshFromServer().catch(console.warn);
+      rebuildIndex(PRODUCTS);
+      // refrescar en background
+      requestIdleCallback?.(refreshFromServer) ?? setTimeout(refreshFromServer, 0);
       return PRODUCTS;
     }
   } catch(_) {}
 
-  // 1) Si no hay cache, ir directo al server
+  // 1) Sin cache: traemos versión + productos lo más rápido posible
   await refreshFromServer(true);
   return PRODUCTS;
 }
@@ -118,26 +131,24 @@ async function refreshFromServer(force = false){
   _refreshing = true;
   try {
     // pedir versión remota
-    let remoteVersion = '0';
+    let remoteVersion = CURRENT_VERSION;
     try {
-      const v = await fetchJSON(VERSION_URL);
+      const v = await fetchJSON(VERSION_URL, {timeout:4000});
       remoteVersion = String(v.version || '0');
     } catch(_) {}
 
     if (!force && remoteVersion === CURRENT_VERSION && PRODUCTS.length) return;
 
     // traer productos remotos (rompemos cache CDN con ?v=version)
-    const remoteRaw = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(remoteVersion)}`);
+    const remoteRaw = await fetchJSON(`${DATA_URL}?v=${encodeURIComponent(remoteVersion)}`, {timeout:7000});
     const remoteList = normalizeArray(remoteRaw);
 
-    // guardar cache público (siempre el remoto canónico)
+    // cache público + estado actual
     savePublicCache(remoteVersion, remoteList);
-
-    // elegir qué mostrar (override si coincide versión, si no remoto)
     CURRENT_VERSION = remoteVersion;
     PRODUCTS = pickDisplayList(remoteList, CURRENT_VERSION);
+    rebuildIndex(PRODUCTS);
 
-    // volver a dibujar si ya hay UI
     rerender();
   } catch (e) {
     console.warn('refreshFromServer error', e);
@@ -153,7 +164,7 @@ function rerender(){
   if (page === 'cart')    renderCart();
 }
 
-const findProduct = id => PRODUCTS.find(p => p.id === id);
+const findProduct = id => _byId[id];
 
 // ====== Stock efectivo (resta lo que hay en carrito) ======
 function reservedQty(productId, size, excludeIndex = null){
@@ -184,6 +195,7 @@ function setupLazyImages(rootEl){
       if (en.isIntersecting) {
         const img = en.target;
         img.src = img.dataset.src;
+        img.decoding = 'async';
         img.removeAttribute('data-src');
         io.unobserve(img);
       }
@@ -254,14 +266,28 @@ async function renderIndex(){
 }
 
 function bindIndexFilters(){
-  $('#searchInput')?.addEventListener('input', e => { FILTERS.q = e.target.value || ''; renderIndex(); });
+  $('#searchInput')?.addEventListener('input', debounce(e => { FILTERS.q = e.target.value || ''; renderIndex(); }, 180));
   $('#leagueSel')?.addEventListener('change', e => { FILTERS.league = e.target.value || ''; renderIndex(); });
   $('#versionSel')?.addEventListener('change', e => { FILTERS.version = e.target.value || ''; renderIndex(); });
   $('#retroChk')?.addEventListener('change', e => { FILTERS.retro = !!e.target.checked; renderIndex(); });
   $('#onlyRetro')?.addEventListener('click', e => { e.preventDefault(); FILTERS.retro = true; const c = $('#retroChk'); if (c) c.checked = true; renderIndex(); });
 }
 
+// ====== Loader para product.html (controlado desde acá para evitar parpadeos) ======
+function setProductStatus(mode){
+  const box = $('#product-status');
+  if (!box) return;
+  if (mode === 'hide'){ box.style.display='none'; return; }
+  if (mode === 'error'){ box.className='status status--error'; box.textContent='No encontramos ese producto.'; box.style.display='flex'; return; }
+  // loading
+  box.className='status status--loading';
+  box.innerHTML='<span class="spinner" aria-hidden="true"></span><span>Cargando producto…</span>';
+  box.style.display='flex';
+}
+
 // ====== Detalle ======
+const productCacheKey = id => `p_cache_${id}`; // cache rápido por pestaña
+
 function sizePill(size, qty){
   return `<span class="badge bg-light text-dark border me-1 mb-1 ${qty<=0?'text-decoration-line-through opacity-50':''}">
     ${size}: ${qty>0?qty:'sin stock'}
@@ -270,10 +296,37 @@ function sizePill(size, qty){
 
 async function renderProduct(){
   const view = $('#productView'); if (!view) return;
+
+  const id = new URLSearchParams(location.search).get('id') || '';
+  if (!id) { setProductStatus('error'); view.innerHTML = ''; return; }
+
+  // 0) Loader visible y prueba de caché de esta pestaña
+  setProductStatus('loading');
+
+  const cached = sessionStorage.getItem(productCacheKey(id));
+  if (cached){
+    const p = JSON.parse(cached);
+    renderProductInner(p);
+    setProductStatus('hide');
+    // warm-up en idle
+    requestIdleCallback?.(()=>loadProducts()) ?? setTimeout(loadProducts, 0);
+    return;
+  }
+
+  // 1) Carga global (rápida si hay cache por versión)
   await loadProducts();
-  const id = new URLSearchParams(location.search).get('id');
+
   const p = findProduct(id);
-  if (!p){ view.innerHTML = `<p>No se encontró el producto.</p>`; return; }
+  if (!p){ setProductStatus('error'); view.innerHTML = ''; return; }
+
+  // 2) Render + cache por pestaña
+  sessionStorage.setItem(productCacheKey(id), JSON.stringify(p));
+  renderProductInner(p);
+  setProductStatus('hide');
+}
+
+function renderProductInner(p){
+  const view = $('#productView'); if (!view) return;
 
   const eff = effectiveSizes(p);
   const sizesHtml = Object.entries(eff).map(([s,q]) => sizePill(s,q)).join(' ');
@@ -286,9 +339,10 @@ async function renderProduct(){
 
   view.innerHTML = `
     <div class="col-md-6">
-      <div class="d-flex flex-column gap-3">
+      <div class="d-flex flex-column gap-3 product-hero">
         <img id="mainImg" class="img-fluid rounded"
              src="${mainImg}" alt="${p.name || 'Producto'}"
+             decoding="async"
              onerror="this.onerror=null;this.src='assets/img/placeholder.jpg'">
         <div class="d-flex flex-wrap gap-2">
           ${(p.images||[]).map((src,i)=>`<img class="rounded border" style="width:82px;height:82px;object-fit:cover;cursor:pointer"
@@ -330,7 +384,7 @@ async function renderProduct(){
   // thumbs -> main
   $$('#productView [data-src]').forEach(t => t.addEventListener('click', e => {
     const src = e.currentTarget.dataset.src || e.currentTarget.src;
-    $('#mainImg').src = src;
+    const main = $('#mainImg'); if (main) { main.src = src; main.decoding='async'; }
   }));
 
   // add to cart (valida stock efectivo)
@@ -341,7 +395,7 @@ async function renderProduct(){
     if (avail <= 0) return alert('No hay stock de ese talle.');
     if (qty > avail) { qty = avail; alert(`Solo quedan ${avail} en talle ${size}.`); }
     addToCart(p.id, size, qty);
-    renderProduct();
+    renderProductInner(p); // refresca stock mostrado
   });
 
   // compra directa por whatsapp
@@ -360,7 +414,7 @@ async function renderProduct(){
 // ====== Carrito ======
 function addToCart(productId, size, qty=1){
   const cart = getCart();
-  const p = PRODUCTS.find(x=>x.id===productId);
+  const p = _byId[productId];
   if (!p) return;
   const avail = availableFor(p, size);
   if (avail <= 0) { alert('No hay stock de ese talle.'); return; }
@@ -384,7 +438,7 @@ function removeFromCart(i){
 }
 function updateQty(i, q){
   const cart = getCart();
-  const p = PRODUCTS.find(x=>x.id===cart[i].productId) || {};
+  const p = _byId[cart[i].productId] || {};
   const max = availableFor(p, cart[i].size, i);
   cart[i].qty = Math.max(1, Math.min(q|0, Math.max(1, max)));
   setCart(cart);
@@ -412,7 +466,7 @@ async function renderCart(){
         </tr></thead>
         <tbody>
           ${cart.map((i,idx)=> {
-            const p = PRODUCTS.find(x=>x.id===i.productId) || {};
+            const p = _byId[i.productId] || {};
             const max = availableFor(p, i.size, idx);
             const name = i.name || p.name || 'Producto';
             const price = i.price ?? p.price ?? 0;
@@ -574,6 +628,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (new URLSearchParams(location.search).has('reset')) {
     localStorage.removeItem(LS_KEY_PRODUCTS);
     localStorage.removeItem(PUBLIC_CACHE_KEY);
+    sessionStorage.clear();
   }
 
   updateCartBadge();
@@ -584,4 +639,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (page === 'cart'){ await renderCart(); $('#checkoutBtn')?.addEventListener('click', checkout); }
 
   bindQuickOrderForm(); // modal "Hacé tu pedido"
+
+  // Optimización global: imágenes existentes -> async decode
+  document.querySelectorAll('img').forEach(img=>{
+    if(!img.closest('.product-hero')) img.loading = img.loading || 'lazy';
+    img.decoding = 'async';
+  });
 });

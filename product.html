@@ -4,15 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Producto · Store FC</title>
+
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
   <link href="css/styles.css?v=20251009" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Pequeños boosts de performance -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preload" href="data/products.json" as="fetch" crossorigin>
+
   <style>
     button, .btn, input, select { min-height:44px; }
-    /* Ocultar "Forzar recarga" en XS */
+    /* Ocultar "Forzar recarga" (si lo agregás) en XS */
     @media (max-width:576px){ .force-reload { display:none !important; } }
 
-    /* Barra de acción móvil (intenta espejar "Agregar al carrito") */
+    /* Barra de acción móvil (espeja "Agregar al carrito") */
     .mobile-action-bar{
       position:fixed; left:0; right:0; bottom:0; z-index:1030;
       background:#fff; border-top:1px solid #e5e5e5;
@@ -27,6 +33,22 @@
     @media (max-width:576px){
       main.container{ padding-top:1.25rem !important; }
     }
+
+    /* Loader / estados */
+    .status{display:flex;gap:.6rem;align-items:center;font-size:1.05rem;color:#555}
+    .status--loading .spinner{
+      width:18px;height:18px;border-radius:50%;
+      border:3px solid #ccc;border-top-color:#111;animation:spin .8s linear infinite
+    }
+    .status--error{color:#b00020}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Skeleton simple opcional */
+    .skel{
+      background:linear-gradient(90deg,#eee 25%,#f6f6f6 37%,#eee 63%);
+      background-size:400% 100%;animation:shimmer 1.2s ease-in-out infinite
+    }
+    @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
   </style>
 </head>
 <body data-page="product">
@@ -39,14 +61,20 @@
           <i class="bi bi-cart-fill me-1"></i> Carrito
           <span id="cartCount" class="badge bg-dark text-white ms-1 rounded-pill">0</span>
         </a>
-        <a id="forceReload" class="btn btn-link text-decoration-none force-reload" href="#" title="Limpiar datos locales">
-          Forzar recarga
-        </a>
+        <!-- (Opcional) Botón de forzar recarga -->
+        <!-- <a id="forceReload" class="btn btn-link force-reload" href="#">Forzar recarga</a> -->
       </div>
     </div>
   </nav>
 
-  <main class="container py-5">
+  <main class="container py-10">
+    <!-- Loader visible mientras baja el JSON / renderiza -->
+    <div id="product-status" class="status status--loading">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Cargando producto…</span>
+    </div>
+
+    <!-- Aquí renderiza scripts.js el detalle -->
     <div id="productView" class="row g-4"></div>
   </main>
 
@@ -64,34 +92,33 @@
   <script src="js/scripts.js?v=20251009"></script>
 
   <script>
-    // Limpia override local y recarga manteniendo el ?id=
+    // Limpia override local y recarga manteniendo el ?id= (si agregás el botón con id="forceReload")
     document.getElementById('forceReload')?.addEventListener('click', function (e) {
       e.preventDefault();
       localStorage.removeItem('admin_products_override');
-      location.reload(); // preserva la query actual (incluye id)
+      sessionStorage.clear();
+      location.reload();
     });
 
-    // Intento de "enganchar" el botón Agregar original para que el móvil lo dispare
+    // Barra móvil: engancha al botón "Agregar al carrito" real
     (function(){
       const root = document.getElementById('productView');
       const btnMobile = document.getElementById('mobileAddToCart');
 
       function findAddBtn(){
-        // selectores comunes
         const sel = [
           '#productView button#addToCart',
           '#productView button.btn-add-cart',
           '#productView button[data-add]',
           '#productView button[data-action="add"]',
           '#productView button[name="add"]',
-          '#productView .btn.btn-dark',      // fallback razonable
-          '#productView button.btn-primary'   // fallback
+          '#productView .btn.btn-dark',
+          '#productView button.btn-primary'
         ];
         for (const s of sel){
           const b = document.querySelector(s);
           if (b) return b;
         }
-        // búsqueda por texto
         const cand = [...root.querySelectorAll('button, a.btn')].find(x =>
           /agregar|añadir|carrito|add to cart/i.test(x.textContent || '')
         );
@@ -106,11 +133,66 @@
         btnMobile.onclick = () => target.click();
       }
 
-      // Observa cuando scripts.js renderiza el producto
       const obs = new MutationObserver(wire);
       obs.observe(root, { childList:true, subtree:true });
-      // Intento inicial
       wire();
+    })();
+
+    // Loader inteligente: evita mostrar "No se encontró" mientras aún está cargando
+    (function(){
+      const view   = document.getElementById('productView');
+      const status = document.getElementById('product-status');
+      const NOTFOUND_RE = /no se encontr[oó]/i;
+      let showedProduct = false;
+      let notFoundTimer = null;
+
+      function showLoading(){
+        status.className = 'status status--loading';
+        status.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Cargando producto…</span>';
+        status.style.display = 'flex';
+      }
+      function hideStatus(){ status.style.display='none'; }
+      function showNotFound(){
+        status.className = 'status status--error';
+        status.textContent = 'No encontramos ese producto.';
+        status.style.display = 'flex';
+      }
+
+      showLoading();
+
+      const obs = new MutationObserver(() => {
+        // Acelera imágenes nuevas
+        view.querySelectorAll('img:not([data-lazy-patched])').forEach(img=>{
+          img.loading  = img.closest('.product-hero') ? 'eager' : 'lazy';
+          img.decoding = 'async';
+          img.setAttribute('data-lazy-patched','1');
+        });
+
+        const txt = (view.textContent||'').trim();
+        const hasUI = view.querySelector('select,button,input,.card,.row img');
+
+        if(hasUI){ showedProduct = true; hideStatus(); clearTimeout(notFoundTimer); return; }
+
+        // Si aparece el texto "no se encontró", lo retrasamos por si todavía está llegando el dato
+        if(NOTFOUND_RE.test(txt) && !showedProduct && !notFoundTimer){
+          notFoundTimer = setTimeout(()=>{
+            const nowHasUI = view.querySelector('select,button,input,.card,.row img');
+            if(!nowHasUI) showNotFound();
+          }, 1200);
+        }
+      });
+      obs.observe(view, { childList:true, subtree:true });
+
+      // Red de seguridad
+      setTimeout(()=>{ if(!showedProduct) showNotFound(); }, 8000);
+
+      // Lazy/async para cualquier imagen inicial
+      document.addEventListener('DOMContentLoaded', ()=>{
+        document.querySelectorAll('img').forEach(img=>{
+          if(!img.closest('.product-hero')) img.loading = 'lazy';
+          img.decoding = 'async';
+        });
+      });
     })();
   </script>
 </body>
